@@ -49,19 +49,75 @@ robot_models:
       half_length: 0.108
       half_width: 0.07
       friction: 0.7
+  hrp4j_soft:
+    sole:
+      half_length: 0.13891
+      half_width: 0.05225 # 0.05225
+      friction: 0.7
+      leftAnkleOffset: [0.0,0.0] # target center of foot 
+    stabilizer:
+      rightFootSurface: RightFootCenter
+      leftFootSurface: LeftFootCenter
+      admittance:
+        com: [0.0, 0.0] # [0.0, 0.0]
+        cop: [0.01, 0.01] # [0.025, 0.01]
+        dfz: 0.0001 # 0.0001
+        dfz_damping: 0.0
+      tasks:
+        com:
+          active_joints: [Root, R_HIP_Y, R_HIP_R, R_HIP_P, R_KNEE_P, R_ANKLE_P, R_ANKLE_R, L_HIP_Y, L_HIP_R, L_HIP_P, L_KNEE_P, L_ANKLE_P, L_ANKLE_R]
+          height: 0.78 # 0.75 or 0.8483
+        torso:
+          name: torso
+          pitch: 0.1
+      dcm_bias:
+        biasDriftPerSecondStd: 0.0001
+        zmpMeasureErrorStd: 0.0005
+        withDCMBias: true
+      dcm_tracking:
+        gains:
+          prop: 7.0 # 3.0
+          integral: 70.0 # 20.0
+          deriv: 1.0 # 0.5
+        derivator_time_constant: 1.0
+        integrator_time_constant: 10.0
   hrp4:
     sole:
       half_length: 0.112
       half_width: 0.065
       friction: 0.7
-    torso:
-      pitch: 0.1
   hrp4j:
     sole:
       half_length: 0.08
       half_width: 0.038
       friction: 0.7
       leftAnkleOffset: [0.,0.] # target center of foot
+    stabilizer:
+      rightFootSurface: RightFootCenter
+      leftFootSurface: LeftFootCenter
+      admittance:
+        com: [0.0, 0.0] # [0.0, 0.0]
+        cop: [0.01, 0.01] # [0.0002, 0.0001]
+        dfz: 0.0001 # 0.0001
+        dfz_damping: 0.0
+      tasks:
+        com:
+          active_joints: [Root, R_HIP_Y, R_HIP_R, R_HIP_P, R_KNEE_P, R_ANKLE_P, R_ANKLE_R, L_HIP_Y, L_HIP_R, L_HIP_P, L_KNEE_P, L_ANKLE_P, L_ANKLE_R]
+          height: 0.75 # 0.75 or 0.8483
+        torso:
+          name: torso
+          pitch: 0.1
+      dcm_bias:
+        biasDriftPerSecondStd: 0.0001
+        zmpMeasureErrorStd: 0.0005
+        withDCMBias: true
+      dcm_tracking:
+        gains:
+          prop: 3.0 # 3.0
+          integral: 0.0 # 20.0
+          deriv: 1 # 0.5
+        derivator_time_constant: 1.0
+        integrator_time_constant: 10.0
   hrp4cr:
     stabilizer:
       dcm_tracking:
@@ -124,6 +180,240 @@ robot_models:
     torso:
       pitch: 0.0
 plans:
+  hrp4j_soft:
+    ashibumi: # stepping in place
+      double_support_duration: 0.5
+      single_support_duration: 0.8
+      com_height: 0.75 # 0.75 or 0.8483
+      swing_height: 0.04
+      contacts:
+        - pose:
+            translation: [0.0, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.07, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.0, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.07, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.0, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.07, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.0, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.07, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.0, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.07, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.0, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.07, 0.0]
+          surface: LeftFootCenter
+    custom_backward:
+      double_support_duration: 0.5
+      single_support_duration: 0.8
+      step_length: 0.1
+      swing_height: 0.05
+      com_height: 0.75 # 0.75 or 0.8483
+      contacts:
+        - pose:
+            translation: [0.0, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.07, 0.0]
+          surface: LeftFootCenter
+    custom_forward:
+      double_support_duration: 0.4
+      single_support_duration: 0.7
+      step_length: 0.15
+      swing_height: 0.04
+      com_height: 0.75 # 0.75 or 0.8483
+      contacts:
+        - pose:
+            translation: [0.0, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.07, 0.0]
+          surface: LeftFootCenter
+    custom_lateral:
+      double_support_duration: 0.4
+      single_support_duration: 0.7
+      step_length: 0.05
+      swing_height: 0.04
+      com_height: 0.75 # 0.75 or 0.8483
+      contacts:
+        - pose:
+            translation: [0.0, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.07, 0.0]
+          surface: LeftFootCenter
+      mpc:
+        weights:
+          jerk: 1.0
+          vel: [10.0, 300.0]
+          zmp: 1000.0
+    warmup:
+      double_support_duration: 0.5
+      single_support_duration: 0.7
+      swing_height: 0.04
+      com_height: 0.75 # 0.75 or 0.8483
+      contacts:
+        - pose:
+            translation: [0.035, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.07, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.035, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.07, 0.0]
+          surface: LeftFootCenter
+    external:
+      double_support_duration: 0.5
+      single_support_duration: 0.7
+      swing_height: 0.04
+      com_height: 0.75 # 0.75 or 0.8483
+      contacts:
+        - pose:
+            translation: [0.035, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.07, 0.0]
+          surface: LeftFootCenter
+  hrp4j:
+    ashibumi: # stepping in place
+      double_support_duration: 0.5
+      single_support_duration: 0.8
+      com_height: 0.75
+      swing_height: 0.04
+      contacts:
+        - pose:
+            translation: [0.035, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.07, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.035, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.07, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.035, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.07, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.035, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.07, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.035, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.07, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.035, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.07, 0.0]
+          surface: LeftFootCenter
+    custom_backward:
+      double_support_duration: 0.5
+      single_support_duration: 0.8
+      step_length: 0.1
+      swing_height: 0.05
+      com_height: 0.75
+      contacts:
+        - pose:
+            translation: [0.0, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.07, 0.0]
+          surface: LeftFootCenter
+    custom_forward:
+      double_support_duration: 0.4
+      single_support_duration: 0.7
+      step_length: 0.15
+      swing_height: 0.04
+      com_height: 0.75
+      contacts:
+        - pose:
+            translation: [0.0, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.07, 0.0]
+          surface: LeftFootCenter
+    custom_lateral:
+      double_support_duration: 0.4
+      single_support_duration: 0.7
+      step_length: 0.05
+      swing_height: 0.04
+      com_height: 0.75
+      contacts:
+        - pose:
+            translation: [0.0, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.07, 0.0]
+          surface: LeftFootCenter
+      mpc:
+        weights:
+          jerk: 1.0
+          vel: [10.0, 300.0]
+          zmp: 1000.0
+    warmup:
+      double_support_duration: 0.5
+      single_support_duration: 0.7
+      swing_height: 0.04
+      com_height: 0.75
+      contacts:
+        - pose:
+            translation: [0.035, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.07, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.035, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.07, 0.0]
+          surface: LeftFootCenter
+    external:
+      double_support_duration: 0.5
+      single_support_duration: 0.7
+      swing_height: 0.04
+      com_height: 0.75
+      contacts:
+        - pose:
+            translation: [0.035, -0.07, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.07, 0.0]
+          surface: LeftFootCenter
   hrp4:
     ashibumi: # stepping in place
       double_support_duration: 0.2
@@ -1344,23 +1634,64 @@ StatesLibraries:
 - "@MC_CONTROLLER_INSTALL_PREFIX@/lipm_walking_controller/states"
 Managed: false
 StepByStep: false
+<<<<<<< HEAD
 init: LIPMWalking::Initial
+=======
+init: Initial
+states:
+  WalkInternal:
+    base: Meta
+    transitions:
+      - [Standing, DoubleSupport, DoubleSupport]
+      - [DoubleSupport, SingleSupport, SingleSupport]
+      - [DoubleSupport, Standing, Standing]
+      - [SingleSupport, DoubleSupport, DoubleSupport]
+  WalkFSM:
+    base: Parallel
+    states: [RunStabilizer, WalkInternal]
+
+>>>>>>> Fix merge issue
 transitions:
   - [LIPMWalking::Initial, Standing, LIPMWalking::WalkFSM]
 
 Plugins: [footsteps_planner_plugin, ExternalFootstepPlannerPlugin]
 
 # Set realRobot's joint configuration from encoder readings
+# ObserverPipeline:
+# - name: LIPMWalkingObserverPipeline      # - Create a new pipeline
+#   gui: true                              #   diplay the pipeline in the GUI (default = false)
+#   log: true                              #   log observers (default)
+#   observers:                             #   declare which observers to use
+#   - type: Encoder                        # - Use an EncoderObserver
+#     config:                              #
+#       position: encoderValues            #    - Sets joint position from encoder sensor values (default)
+#       velocity: encoderFiniteDifferences #    - Computes joint velocities by finite differences  (default)
+#                                         # We now have the estimation of each joint position and velocity and the corresponding
+#                                         # body positions and velocities, but we are still missing the floating base
+#   - type: BodySensor                     # - Use a BodySensor observer
+#     update: false                        #   Do not update the real robot state
+#     gui: false                           #   Do not display in the gui
+#     config:                              #
+#       bodySensor: FloatingBase           #   In simulation, the interface will fill this sensor with ground truth values
+#                                         #   The observer computes the position and velocity of the floating base
+#                                         #   by transforming the sensor measurements to the floating base frame
+#   - type: KinematicInertial              # - Estimates the floating base state using the KinematicInertial observer
+#     update: true                         #   update the real robot instance from its results
+#     gui: true                            #   Displays the estimated velocity as an arrow (default)
+#     config:
+#       imuBodySensor: Accelerometer       # This observer only uses roll and pitch rotation information from this sensor
+#                                       # along with a kinematic anchor point and the robot kinematics between the anchor
+#                                       # frame and the floating base frame. The anchor frame is expected to be provided
+#                                       # through a datastore callback (see below for details)
+
 ObserverPipelines:
-  name: "LIPMWalkingObserverPipeline"
-  gui: true
+- name: "LIPMWalkingObserverPipeline"
   observers:
     - type: Encoder
-    - type: Attitude
-      required: false
+      # Floating base kinematic-inertial state observation
     - type: KinematicInertial
-      config:
-        anchorFrame:
-          maxAnchorFrameDiscontinuity: 0.02
+      # Floating base Groundtruth
     - type: BodySensor
       update: false
+      config:
+        bodySensor: FloatingBase
