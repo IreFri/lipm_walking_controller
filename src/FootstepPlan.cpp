@@ -181,12 +181,12 @@ void FootstepPlan::updateInitialTransform(const sva::PTransformd & X_0_lf,
     const sva::PTransformd & X_0_c = contacts_[i].pose;
     contacts_[i].pose = X_0_c * X_delta;
   }
-  if(contacts_[0].surfaceName == "LeftFootCenter" && contacts_[1].surfaceName == "RightFootCenter")
+  if((contacts_[0].surfaceName == "LeftFootCenter" && contacts_[1].surfaceName == "RightFootCenter") || (contacts_[0].surfaceName == "LeftFootCenter_Soft" && contacts_[1].surfaceName == "RightFootCenter_Soft"))
   {
     contacts_[0].pose = makeHorizontal(X_0_lf);
     contacts_[1].pose = makeHorizontal(X_0_rf);
   }
-  else if(contacts_[0].surfaceName == "RightFootCenter" && contacts_[1].surfaceName == "LeftFootCenter")
+  else if((contacts_[0].surfaceName == "RightFootCenter" && contacts_[1].surfaceName == "LeftFootCenter") || (contacts_[0].surfaceName == "RightFootCenter_Soft" && contacts_[1].surfaceName == "LeftFootCenter_Soft"))
   {
     contacts_[0].pose = makeHorizontal(X_0_rf);
     contacts_[1].pose = makeHorizontal(X_0_lf);

@@ -113,11 +113,11 @@ struct Contact
    */
   Eigen::Vector3d anklePos(const Sole & sole) const
   {
-    if(surfaceName == "LeftFootCenter")
+    if(surfaceName == "LeftFootCenter" || surfaceName == "LeftFootCenter_Soft")
     {
       return p() + sole.leftAnkleOffset.x() * sagittal() + sole.leftAnkleOffset.y() * lateral();
     }
-    else if(surfaceName == "RightFootCenter")
+    else if(surfaceName == "RightFootCenter" || surfaceName == "RightFootCenter_Soft")
     {
       return p() + sole.leftAnkleOffset.x() * sagittal() - sole.leftAnkleOffset.y() * lateral();
     }
