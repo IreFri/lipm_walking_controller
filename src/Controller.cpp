@@ -206,6 +206,19 @@ Controller::Controller(std::shared_ptr<mc_rbdyn::RobotModule> robotModule,
     return sva::interpolate(robot.surfacePose("RightFootCenter"), robot.surfacePose("LeftFootCenter"), leftFootRatio_);
   });
 
+  for(const auto & r: realRobots())
+  {
+    const std::string name = r.name();
+    gui()->addElement({"RealRobots"},
+      mc_rtc::gui::Robot(name,
+        [name, this]() -> const mc_rbdyn::Robot &
+        {
+          return this->realRobot(name);
+        }
+      )
+    );
+  }
+
   mc_rtc::log::success("LIPMWalking controller init done.");
 }
 
