@@ -226,6 +226,7 @@ void states::Standing::startWalking()
     return;
   }
   startWalking_ = true;
+  controller().nrFootsteps_ = 0;
   gui()->addElement({"Walking", "Main"},
                     mc_rtc::gui::Button("Pause walking", [&ctl]() { ctl.pauseWalkingCallback(/* verbose = */ true); }));
 }

@@ -86,6 +86,7 @@ bool states::SingleSupport::checkTransitions()
   if(remTime_ < 0.)
   {
     output("DoubleSupport");
+    controller().nrFootsteps_ ++;
     return true;
   }
   return false;

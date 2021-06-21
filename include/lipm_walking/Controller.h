@@ -304,6 +304,8 @@ struct MC_CONTROL_DLLAPI Controller : public mc_control::fsm::Controller
   }
 
 public: /* visible to FSM states */
+  unsigned int nrFootsteps_ = 0;
+
   FootstepPlan plan; /**< Current footstep plan */
   PlanInterpolator planInterpolator; /**< Footstep plan interpolator */
   bool emergencyStop = false; /**< Emergency flag: if on, the controller stops doing anything */

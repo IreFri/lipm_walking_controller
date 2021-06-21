@@ -219,6 +219,9 @@ Controller::Controller(std::shared_ptr<mc_rbdyn::RobotModule> robotModule,
     );
   }
 
+  gui()->addElement({"Walking", "Main"}, mc_rtc::gui::Label("nrFootsteps", [this]() { return this->nrFootsteps_; }));
+  logger().addLogEntry("nrFootsteps", [this]() { return this->nrFootsteps_; });
+
   mc_rtc::log::success("LIPMWalking controller init done.");
 }
 
