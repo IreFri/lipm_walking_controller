@@ -1634,23 +1634,7 @@ StatesLibraries:
 - "@MC_CONTROLLER_INSTALL_PREFIX@/lipm_walking_controller/states"
 Managed: false
 StepByStep: false
-<<<<<<< HEAD
 init: LIPMWalking::Initial
-=======
-init: Initial
-states:
-  WalkInternal:
-    base: Meta
-    transitions:
-      - [Standing, DoubleSupport, DoubleSupport]
-      - [DoubleSupport, SingleSupport, SingleSupport]
-      - [DoubleSupport, Standing, Standing]
-      - [SingleSupport, DoubleSupport, DoubleSupport]
-  WalkFSM:
-    base: Parallel
-    states: [RunStabilizer, WalkInternal]
-
->>>>>>> Fix merge issue
 transitions:
   - [LIPMWalking::Initial, Standing, LIPMWalking::WalkFSM]
 

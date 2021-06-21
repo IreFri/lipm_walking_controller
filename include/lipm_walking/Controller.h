@@ -300,6 +300,8 @@ struct MC_CONTROL_DLLAPI Controller : public mc_control::fsm::Controller
 
 public: /* visible to FSM states */
   WalkingState walkingState = WalkingState::Standby; /**< Current state */
+  unsigned int nrFootsteps_ = 0;
+
   FootstepPlan plan; /**< Current footstep plan */
   PlanInterpolator planInterpolator; /**< Footstep plan interpolator. Used to generate a simple FootstepPlan when we are
                                         not using an external planner */
