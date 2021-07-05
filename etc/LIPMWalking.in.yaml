@@ -43,7 +43,7 @@ robot_models:
       half_length: 0.13891
       half_width: 0.05225 # 0.05225
       friction: 0.7
-      leftAnkleOffset: [0.0,0.0] # target center of foot 
+      leftAnkleOffset: [-0.03,0.0] # target: 3 cm backward respect to the center of the foot (like in the real experiments)
     stabilizer:
       rightFootSurface: RightFootCenter
       leftFootSurface: LeftFootCenter
@@ -52,10 +52,13 @@ robot_models:
         cop: [0.01, 0.01] # [0.025, 0.01]
         dfz: 0.0001 # 0.0001
         dfz_damping: 0.0
+        maxVel:
+          angular: [3., 3., 3.]
+          linear: [0.5, 0.5, 0.5]
       tasks:
         com:
           active_joints: [Root, R_HIP_Y, R_HIP_R, R_HIP_P, R_KNEE_P, R_ANKLE_P, R_ANKLE_R, L_HIP_Y, L_HIP_R, L_HIP_P, L_KNEE_P, L_ANKLE_P, L_ANKLE_R]
-          height: 0.78 # 0.75 or 0.8483
+          height: 0.778 # 0.75 or 0.8483
         torso:
           name: torso
           pitch: 0.1
@@ -65,9 +68,9 @@ robot_models:
         withDCMBias: true
       dcm_tracking:
         gains:
-          prop: 7.0 # 3.0
-          integral: 70.0 # 20.0
-          deriv: 1.0 # 0.5
+          prop: 3.0 # 3.0
+          integral: 0.0 # 20.0
+          deriv: 0.0 # 0.5
         derivator_time_constant: 1.0
         integrator_time_constant: 10.0
   hrp4:
@@ -153,7 +156,7 @@ plans:
     ashibumi: # stepping in place
       double_support_duration: 0.5
       single_support_duration: 0.8
-      com_height: 0.75 # 0.75 or 0.8483
+      com_height: 0.778 # 0.75 or 0.8483
       swing_height: 0.04
       contacts:
         - pose:
@@ -197,7 +200,7 @@ plans:
       single_support_duration: 0.8
       step_length: 0.1
       swing_height: 0.05
-      com_height: 0.75 # 0.75 or 0.8483
+      com_height: 0.778 # 0.75 or 0.8483
       contacts:
         - pose:
             translation: [0.0, -0.07, 0.0]
@@ -209,8 +212,8 @@ plans:
       double_support_duration: 0.4
       single_support_duration: 0.7
       step_length: 0.15
-      swing_height: 0.04
-      com_height: 0.75 # 0.75 or 0.8483
+      swing_height: 0.06
+      com_height: 0.778 # 0.75 or 0.8483
       contacts:
         - pose:
             translation: [0.0, -0.07, 0.0]
@@ -223,7 +226,7 @@ plans:
       single_support_duration: 0.7
       step_length: 0.05
       swing_height: 0.04
-      com_height: 0.75 # 0.75 or 0.8483
+      com_height: 0.778 # 0.75 or 0.8483
       contacts:
         - pose:
             translation: [0.0, -0.07, 0.0]
@@ -240,7 +243,7 @@ plans:
       double_support_duration: 0.5
       single_support_duration: 0.7
       swing_height: 0.04
-      com_height: 0.75 # 0.75 or 0.8483
+      com_height: 0.778 # 0.75 or 0.8483
       contacts:
         - pose:
             translation: [0.035, -0.07, 0.0]
@@ -258,7 +261,7 @@ plans:
       double_support_duration: 0.5
       single_support_duration: 0.7
       swing_height: 0.04
-      com_height: 0.75 # 0.75 or 0.8483
+      com_height: 0.778 # 0.75 or 0.8483
       contacts:
         - pose:
             translation: [0.035, -0.07, 0.0]
