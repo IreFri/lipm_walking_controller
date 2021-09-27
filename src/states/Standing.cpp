@@ -42,6 +42,8 @@ constexpr double COM_STIFFNESS = 5.; // standing has CoM set-point task
 void states::Standing::start()
 {
   auto & ctl = controller();
+  // ctl.postureTask->posture(ctl.halfSitPose);
+
   auto & supportContact = ctl.supportContact();
   auto & targetContact = ctl.targetContact();
 

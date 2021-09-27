@@ -327,7 +327,7 @@ private:
   SE2d lastBackwardTarget_ = {-0.5, 0., 0.}; /**< Last target for a custom_backward plan */
   SE2d lastForwardTarget_ = {0.5, 0., 0.}; /**< Last target for a custom_forward plan */
   SE2d lastLateralTarget_ = {0.0, 0.3, 0.}; /**< Last target for a custom_lateral plan */
-  SE2d targetPose_ = {2.0, 0.0, 0.0}; /**< Target SE2 transform in the horizontal plane */
+  SE2d targetPose_ = {3.0, 0.0, 0.0}; /**< Target SE2 transform in the horizontal plane */
   bool startWithRightFootstep_ = true;
   double desiredStepAngle_ = 10. * M_PI / 180.; // [rad]
   double desiredStepLength_ = 0.2; // [m]
