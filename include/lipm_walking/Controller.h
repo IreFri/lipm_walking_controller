@@ -43,6 +43,8 @@
 #include <lipm_walking/Sole.h>
 #include <lipm_walking/WalkingState.h>
 
+#include <boost/circular_buffer.hpp>
+
 /** Main controller namespace.
  *
  */
@@ -300,6 +302,38 @@ struct MC_CONTROL_DLLAPI Controller : public mc_control::fsm::Controller
 
 public: /* visible to FSM states */
   WalkingState walkingState = WalkingState::Standby; /**< Current state */
+  double sum_zmp_error_ = 0.0;
+  double lambda_zmp_ = 3.0;
+  int nr_zmp_error_ = 0;
+  std::vector<double> zmp_;
+
+  double sum_CoM_error_ = 0.0;
+  double lambda_CoM_ = 3.0;
+  int nr_CoM_error_ = 0;
+  std::vector<double> CoM_; 
+
+  double sum_R_Ankle_P_Torque_error_ = 0.0;
+  double lambda_R_Ankle_P_Torque_ = 0.5;
+  int nr_R_Ankle_P_Torque_error_ = 0;
+  std::vector<double> R_Ankle_P_Torque_;
+
+  double sum_L_Ankle_P_Torque_error_ = 0.0;
+  double lambda_L_Ankle_P_Torque_ = 0.5;
+  int nr_L_Ankle_P_Torque_error_ = 0;
+  std::vector<double> L_Ankle_P_Torque_;
+
+  double footstep_error_ = 0.0;
+  double lambda_footstep_ = 10.0;
+
+  double distance_error_ = 0.0;
+  double lambda_distance_ = 10.0;
+
+  bool init_distance = false; 
+  sva::PTransformd foot_target_pose_;
+
+  double cost_ = 0.0;
+  // boost::circular_buffer<double> buffer_;
+
   unsigned int nrFootsteps_ = 0;
 
   FootstepPlan plan; /**< Current footstep plan */

@@ -177,8 +177,12 @@ Controller::Controller(std::shared_ptr<mc_rbdyn::RobotModule> robotModule,
     );
   }
 
+  // Softfoot
   gui()->addElement({"Walking", "Main"}, mc_rtc::gui::Label("nrFootsteps", [this]() { return this->nrFootsteps_; }));
   logger().addLogEntry("nrFootsteps", [this]() { return this->nrFootsteps_; });
+
+  gui()->addElement({"Walking", "Main"}, mc_rtc::gui::Label("cost", [this]() { return this->cost_; }));
+  logger().addLogEntry("cost", [this]() { return cost_; });
 
   mc_rtc::log::success("LIPMWalking controller init done.");
 }
@@ -387,6 +391,133 @@ bool Controller::run()
 
   warnIfRobotIsInTheAir();
 
+  // Update cost
+  {
+    double zmp = 0.0;
+    // ZMP Error
+    {
+      const Eigen::Vector3d & zmp_ref = pendulum_.zmp();
+      const Eigen::Vector3d & zmp_mes = stabilizer_->measuredZMP();
+      const double zmp_error = (zmp_ref - zmp_mes).norm();
+      // sum_zmp_error_ += zmp_error;
+      // ++ nr_zmp_error_;
+      // zmp = lambda_zmp_ * (sum_zmp_error_ / nr_zmp_error_);
+
+      zmp_.push_back(zmp_error);
+      double sum = std::accumulate(zmp_.begin(), zmp_.end(), 0.0);
+      double mean = sum / zmp_.size();
+      std::vector<double> diff(zmp_.size());
+      std::transform(zmp_.begin(), zmp_.end(), diff.begin(), [mean](double x) { return x - mean; });
+      double sq_sum = std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
+      double stdev = std::sqrt(sq_sum / zmp_.size());
+      zmp = lambda_zmp_ * mean + lambda_zmp_ * lambda_zmp_ * stdev;
+    }
+
+    double CoM = 0.0;
+    // CoM error
+    {
+      const Eigen::Vector3d & CoM_ref = pendulum_.com();
+      const Eigen::Vector3d & CoM_mes = stabilizer_->measuredCoM();
+      const double CoM_error = (CoM_ref - CoM_mes).norm();
+      // sum_CoM_error_ += CoM_error;
+      // ++ nr_CoM_error_;
+      // CoM = lambda_CoM_* (sum_CoM_error_ / nr_CoM_error_);
+
+      CoM_.push_back(CoM_error);
+      double sum = std::accumulate(CoM_.begin(), CoM_.end(), 0.0);
+      double mean = sum / CoM_.size();
+      std::vector<double> diff(CoM_.size());
+      std::transform(CoM_.begin(), CoM_.end(), diff.begin(), [mean](double x) { return x - mean; });
+      double sq_sum = std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
+      double stdev = std::sqrt(sq_sum / CoM_.size());
+      CoM = lambda_CoM_ * mean + lambda_CoM_ * lambda_CoM_ * stdev;
+    }
+
+    double R_Ankle_P_Torque = 0.0;
+    double L_Ankle_P_Torque = 0.0;
+    double R_Ankle_P_Torque_real = 0.0;
+    double L_Ankle_P_Torque_real = 0.0;
+    //double R_Ankle_P_Torque_target = 0.0;
+    //double L_Ankle_P_Torque_target = 0.0;
+    // Right and Left ankle pitch torque error
+    // {
+    //   R_Ankle_P_Torque_real = robot().jointTorques()[robot().jointIndexByName("R_ANKLE_P")]; 
+    //   L_Ankle_P_Torque_real = robot().jointTorques()[robot().jointIndexByName("L_ANKLE_P")];  
+    //   //R_Ankle_P_Torque_target = robot().jointTorque()[robot().jointIndexByName("R_ANKLE_P")][0]; 
+    //   //L_Ankle_P_Torque_target = robot().jointTorque()[robot().jointIndexByName("L_ANKLE_P")][0];   
+    //   //const double R_Ankle_P_Torque_error = R_Ankle_P_Torque_target - R_Ankle_P_Torque_target;
+    //   //const double L_Ankle_P_Torque_error = L_Ankle_P_Torque_target - L_Ankle_P_Torque_target;
+
+    //   //R_Ankle_P_Torque_.push_back(R_Ankle_P_Torque_error);
+    //   R_Ankle_P_Torque_.push_back(R_Ankle_P_Torque_real);
+    //   double sum_R = std::accumulate(R_Ankle_P_Torque_.begin(), R_Ankle_P_Torque_.end(), 0.0);
+    //   double mean_R = sum_R / R_Ankle_P_Torque_.size();
+    //   std::vector<double> diff_R(R_Ankle_P_Torque_.size());
+    //   std::transform(R_Ankle_P_Torque_.begin(), R_Ankle_P_Torque_.end(), diff_R.begin(), [mean_R](double x) { return x - mean_R; });
+    //   double sq_sum_R = std::inner_product(diff_R.begin(), diff_R.end(), diff_R.begin(), 0.0);
+    //   double stdev_R = std::sqrt(sq_sum_R / R_Ankle_P_Torque_.size());
+    //   R_Ankle_P_Torque = std::abs(lambda_R_Ankle_P_Torque_ * mean_R + lambda_R_Ankle_P_Torque_ * lambda_R_Ankle_P_Torque_ * stdev_R);
+
+    //   //L_Ankle_P_Torque_.push_back(L_Ankle_P_Torque_error);
+    //   L_Ankle_P_Torque_.push_back(L_Ankle_P_Torque_real);
+    //   double sum_L = std::accumulate(L_Ankle_P_Torque_.begin(), L_Ankle_P_Torque_.end(), 0.0);
+    //   double mean_L = sum_L / L_Ankle_P_Torque_.size();
+    //   std::vector<double> diff_L(L_Ankle_P_Torque_.size());
+    //   std::transform(L_Ankle_P_Torque_.begin(), L_Ankle_P_Torque_.end(), diff_L.begin(), [mean_L](double x) { return x - mean_L; });
+    //   double sq_sum_L = std::inner_product(diff_L.begin(), diff_L.end(), diff_L.begin(), 0.0);
+    //   double stdev_L = std::sqrt(sq_sum_L / L_Ankle_P_Torque_.size());
+    //   L_Ankle_P_Torque = std::abs(lambda_L_Ankle_P_Torque_ * mean_L + lambda_L_Ankle_P_Torque_ * lambda_L_Ankle_P_Torque_ * stdev_L);
+
+    // }
+
+    double footstep = 0.0;
+    // Footstep
+    {
+      //footstep_error_ = plan.contacts().size() / (static_cast<double>(nrFootsteps_) + 1.);
+      // footstep_error_ = 1. / std::sqrt((static_cast<double>(nrFootsteps_) + 1.));
+      footstep_error_ =  plan.contacts().size() - 2 - nrFootsteps_;
+      footstep = lambda_footstep_ * footstep_error_;
+    }
+
+    // Distance between robot and final pose target 
+    double Distance = 0.0;
+    double error_distance = 0.0;
+    if(datastore().has("SLAM::Robot"))   
+    {
+      if(!init_distance)
+      {
+        init_distance = true;
+        const std::vector<Contact> & ListContacts = plan.contacts();
+        sva::PTransformd Foot_Target_Pose = sva::interpolate(ListContacts[ListContacts.size()-2].pose, ListContacts[ListContacts.size()-1].pose, 0.5);
+        sva::PTransformd Foot_Target_Initial_Pose = sva::interpolate(ListContacts[0].pose, ListContacts[1].pose, 0.5);
+        sva::PTransformd initial_target = Foot_Target_Pose*Foot_Target_Initial_Pose.inv();
+        const auto & estimatedRobot = datastore().call<const mc_rbdyn::Robot &>("SLAM::Robot");
+        sva::PTransformd R_Foot_Robot_Pose = estimatedRobot.surfacePose("RightFootCenter");
+        sva::PTransformd L_Foot_Robot_Pose = estimatedRobot.surfacePose("LeftFootCenter");
+        sva::PTransformd Foot_Robot_Pose = sva::interpolate(R_Foot_Robot_Pose, L_Foot_Robot_Pose, 0.5);
+        foot_target_pose_ = initial_target*Foot_Robot_Pose;
+
+        mc_rtc::log::success("foot_target_pose_ : {}", foot_target_pose_.translation().head<2>().transpose());
+
+      }
+      const auto & estimatedRobot = datastore().call<const mc_rbdyn::Robot &>("SLAM::Robot");
+      sva::PTransformd R_Foot_Robot_Pose = estimatedRobot.surfacePose("RightFootCenter");
+      sva::PTransformd L_Foot_Robot_Pose = estimatedRobot.surfacePose("LeftFootCenter");
+      sva::PTransformd Foot_Robot_Pose = sva::interpolate(R_Foot_Robot_Pose, L_Foot_Robot_Pose, 0.5);
+      Distance = (foot_target_pose_.translation().head<2>()-Foot_Robot_Pose.translation().head<2>()).norm();
+      error_distance = lambda_distance_ * Distance;
+
+      //mc_rtc::log::success("foot_target_pose_ : {}, Foot_Robot_Pose : {}, error_distance : {}", foot_target_pose_.translation().head<2>().transpose(), Foot_Robot_Pose.translation().head<2>().transpose(), error_distance);
+      mc_rtc::log::success("Distance : {}", Distance);
+
+    }
+
+    cost_ = - error_distance - zmp - CoM;
+    //cost_ = - error_distance - zmp - R_Ankle_P_Torque - L_Ankle_P_Torque;
+    //cost_ = - footstep - zmp - CoM;
+    //mc_rtc::log::success("Foot_Target_Pose : {}, Foot_Robot_Pose : {}, error_distance : {}", Foot_Target_Pose.translation().head<2>(), Foot_Robot_Pose.translation().head<2>(), error_distance);
+  }
+  
   bool ret = mc_control::fsm::Controller::run();
   // if(mc_control::fsm::Controller::running())
   //{
