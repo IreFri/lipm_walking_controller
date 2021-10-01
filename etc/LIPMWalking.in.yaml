@@ -59,7 +59,7 @@ robot_models:
       tasks:
         com:
           active_joints: [Root, R_HIP_Y, R_HIP_R, R_HIP_P, R_KNEE_P, R_ANKLE_P, R_ANKLE_R, L_HIP_Y, L_HIP_R, L_HIP_P, L_KNEE_P, L_ANKLE_P, L_ANKLE_R]
-          height: 0.778 # 0.75 or 0.8483
+          height: 0.6 # 0.75 or 0.8483
         torso:
           name: torso
           pitch: 0.1
@@ -69,9 +69,9 @@ robot_models:
         withDCMBias: true
       dcm_tracking:
         gains:
-          prop: 5.0 # 3.0
+          prop: 3.0 # 3.0
           integral: 0.0
-          deriv: 1.0 # 0.5
+          deriv: 0.0 # 0.5
         derivator_time_constant: 1.0
         integrator_time_constant: 10.0
   hrp4:
@@ -688,7 +688,7 @@ plans:
       single_support_duration: 0.8
       step_length: 0.15
       swing_height: 0.06
-      com_height: 0.778 # 0.75 or 0.8483
+      com_height: 0.76 # 0.75 or 0.8483
       contacts:
         - pose:
             translation: [0.0, -0.07, 0.0]
@@ -1347,7 +1347,7 @@ plans:
       single_support_duration: 0.7
       step_length: 0.15
       swing_height: 0.04
-      com_height: 0.75
+      com_height: 0.78
       contacts:
         - pose:
             translation: [0.0, -0.07, 0.0]
@@ -2548,7 +2548,7 @@ collisions:
 contacts: []
 robots:
   ground:
-    module: env/obstacles_3cm
+    module: env/ground
     init_pos:
       translation: [+2.21, 0.0, -0.017]
 
@@ -2665,14 +2665,14 @@ ObserverPipelines:
         update: false
         config:
           bodySensor: FloatingBase
-      - type: SLAM
-        update: true
-        config:
-          Robot:
-            hrp4j_soft:
-              camera: base_link
-          SLAM:
-            map: map
-            estimated: WAIST_camera_link
-          Filter:
-            use: false
+      # - type: SLAM
+      #   update: true
+      #   config:
+      #     Robot:
+      #       hrp4j_soft:
+      #         camera: base_link
+      #     SLAM:
+      #       map: map
+      #       estimated: WAIST_camera_link
+      #     Filter:
+      #       use: false
