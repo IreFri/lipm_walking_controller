@@ -336,6 +336,8 @@ public: /* visible to FSM states */
 
   unsigned int nrFootsteps_ = 0;
 
+  double PhalangesStiffness_ = 0.0;
+
   FootstepPlan plan; /**< Current footstep plan */
   PlanInterpolator planInterpolator; /**< Footstep plan interpolator. Used to generate a simple FootstepPlan when we are
                                         not using an external planner */

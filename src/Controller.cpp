@@ -75,6 +75,8 @@ Controller::Controller(std::shared_ptr<mc_rbdyn::RobotModule> robotModule,
   postureTask = getPostureTask(robot().name());
   postureTask->stiffness(postureStiffness);
   postureTask->weight(postureWeight);
+  // std::vector<std::string> inactiveJoints = {"R_VARSTIFF", "L_VARSTIFF"};
+  // postureTask->selectUnactiveJoints(solver(), inactiveJoints);
 
   // Set half-sitting pose for posture task
   const auto & halfSit = robotModule->stance();
@@ -183,6 +185,9 @@ Controller::Controller(std::shared_ptr<mc_rbdyn::RobotModule> robotModule,
 
   gui()->addElement({"Walking", "Main"}, mc_rtc::gui::Label("cost", [this]() { return this->cost_; }));
   logger().addLogEntry("cost", [this]() { return cost_; });
+
+  gui()->addElement({"Walking", "Main"}, mc_rtc::gui::Label("PhalangesStiffness", [this]() { return this->PhalangesStiffness_; }));
+  logger().addLogEntry("PhalangesStiffness", [this]() { return PhalangesStiffness_; });
 
   mc_rtc::log::success("LIPMWalking controller init done.");
 }
@@ -358,8 +363,11 @@ void Controller::leftFootRatio(double ratio)
   leftFootRatio_ = clamp(ratio, 0., 1., "leftFootRatio");
 }
 
+int iter = 0;
 bool Controller::run()
 {
+  iter = iter + 1;
+  // mc_rtc::log::success("iter : {}", iter);
   const auto & observerp = observerPipeline(observerPipelineName_);
   if(!observerp.success())
   {
@@ -441,7 +449,7 @@ bool Controller::run()
     //double L_Ankle_P_Torque_target = 0.0;
     // Right and Left ankle pitch torque error
     // {
-    //   R_Ankle_P_Torque_real = robot().jointTorques()[robot().jointIndexByName("R_ANKLE_P")]; 
+    //   R_Ankle_P_Torque_real = robot().jointTorques()[robot().jointIndexByName("R_ANKLE_P")]; //Torques is the real data, Torque is the target data
     //   L_Ankle_P_Torque_real = robot().jointTorques()[robot().jointIndexByName("L_ANKLE_P")];  
     //   //R_Ankle_P_Torque_target = robot().jointTorque()[robot().jointIndexByName("R_ANKLE_P")][0]; 
     //   //L_Ankle_P_Torque_target = robot().jointTorque()[robot().jointIndexByName("L_ANKLE_P")][0];   
@@ -478,6 +486,29 @@ bool Controller::run()
       footstep_error_ =  plan.contacts().size() - 2 - nrFootsteps_;
       footstep = lambda_footstep_ * footstep_error_;
     }
+
+    // double PhalangesStiffness = 0.0;
+    // // Here I use the two added joints to calculate the variable stiffness of the two feet
+    // { 
+    //   if (iter<10000)
+    //   {
+    //     robot().q()[robot().jointIndexByName("R_VARSTIFF")][0] = 0.02*iter;
+    //     robot().q()[robot().jointIndexByName("L_VARSTIFF")][0] = 0.02*iter;
+    //     //double L_VarStiff = robot().q()[robot().jointIndexByName("L_VARSTIFF")][0];
+    //     double R_VarStiff = 0.02*iter;
+    //     double L_VarStiff = 0.02*iter;
+    //     PhalangesStiffness_ = R_VarStiff;
+    //   }
+    //   else
+    //   {
+    //     robot().q()[robot().jointIndexByName("R_VARSTIFF")][0] = 1000;
+    //     robot().q()[robot().jointIndexByName("L_VARSTIFF")][0] = 1000;
+    //     //double L_VarStiff = robot().q()[robot().jointIndexByName("L_VARSTIFF")][0];
+    //     double R_VarStiff = 1000;
+    //     double L_VarStiff = 1000;
+    //     PhalangesStiffness_ = R_VarStiff;
+    //   }
+    // }
 
     // Distance between robot and final pose target 
     double Distance = 0.0;
