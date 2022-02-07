@@ -48,6 +48,7 @@ if(NOT TARGET mc_rtc::mc_rtc_ros)
   message(FATAL_ERROR "mc_rtc must be built with ROS support for this controller to work")
 endif()
 add_project_dependency(eigen-quadprog REQUIRED)
+add_project_dependency(mc_openrtm REQUIRED)
 
 if(EXISTS "${MC_RTC_LIBDIR}/mc_controller/etc/LIPMWalking.conf")
   message(FATAL_ERROR "\n \
@@ -62,3 +63,4 @@ add_subdirectory(src)
 
 set(PACKAGE_EXTRA_MACROS "set(LIPM_WALKING_STATES_LIBRARIES \"${MC_CONTROLLER_INSTALL_PREFIX}/lipm_walking_controller/states\")
 set(LIPM_WALKING_STATES_FILES \"\${LIPM_WALKING_STATES_LIBRARIES}/data\")")
+add_subdirectory(choreonoid_plugin)

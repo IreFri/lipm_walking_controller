@@ -3,3 +3,5 @@ wiki/
 build/
 compile_commands.json
 .vscode/
+choreonoid_plugin/
+CMakeLists.txt

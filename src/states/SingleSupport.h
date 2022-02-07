@@ -90,6 +90,14 @@ private:
   double stateTime_; /** Time since the beginning of the SSP */
   double timeSinceLastPreviewUpdate_; /**< Time count used to schedule MPC udpates, in [s] */
   std::shared_ptr<mc_tasks::SurfaceTransformTask> swingFootTask; /**< Current swing foot task from the stabilizer */
+
+  //SoftFoot 
+  double Ra_;
+  double Rb_;
+  std::vector<double> ranger_square_;
+  double range_01_;
+  double range_10_;
+
 };
 
 } // namespace states

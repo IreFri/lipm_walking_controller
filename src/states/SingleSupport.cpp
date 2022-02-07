@@ -27,8 +27,7 @@
 
 #include "SingleSupport.h"
 
-namespace lipm_walking
-{
+#include <mc_openrtm/devices/RangeSensor.h>
 
 void states::SingleSupport::handleExternalPlan()
 {
@@ -85,7 +84,7 @@ void states::SingleSupport::start()
   {
     ctl.leftFootRatio(1.);
     ctl.setContacts({{ContactState::Left, supportContact.pose}});
-    swingFootTask = ctl.swingFootTaskRight_;
+    swingFootTask = ctl.swingFootTaskRight_;    
   }
   else
   {
@@ -105,6 +104,12 @@ void states::SingleSupport::start()
 
   logger().addLogEntry("rem_phase_time", [this]() { return remTime_; });
   logger().addLogEntry("walking_phase", []() { return 1.; });
+
+  logger().addLogEntry("MyMeasuresInSSP_"+targetContact.surfaceName+"_Ra", [this]() { return Ra_; });
+  logger().addLogEntry("MyMeasuresInSSP_"+targetContact.surfaceName+"_Rb", [this]() { return Rb_; });
+  logger().addLogEntry("MyMeasuresInSSP_"+targetContact.surfaceName+"_Ranger_01", [this]() { return range_01_; });
+  logger().addLogEntry("MyMeasuresInSSP_"+targetContact.surfaceName+"_Ranger_10", [this]() { return range_10_; });
+
   swingFoot_.addLogEntries(logger());
 
   runState(); // don't wait till next cycle to update reference and tasks
@@ -117,6 +122,13 @@ void states::SingleSupport::teardown()
   logger().removeLogEntry("contact_impulse");
   logger().removeLogEntry("rem_phase_time");
   logger().removeLogEntry("walking_phase");
+  
+  auto & targetContact = controller().targetContact();
+  logger().removeLogEntry("MyMeasuresInSSP_"+targetContact.surfaceName+"_Ra");
+  logger().removeLogEntry("MyMeasuresInSSP_"+targetContact.surfaceName+"_Rb");
+  logger().removeLogEntry("MyMeasuresInSSP_"+targetContact.surfaceName+"_Ranger_01");
+  logger().removeLogEntry("MyMeasuresInSSP_"+targetContact.surfaceName+"_Ranger_10");
+  
   swingFoot_.removeLogEntries(logger());
 }
 
@@ -163,6 +175,141 @@ void states::SingleSupport::runState()
   remTime_ -= dt;
   stateTime_ += dt;
   timeSinceLastPreviewUpdate_ += dt;
+
+  {
+    // SoftFoot: calculate ground roughness with range sensors for variable stiffness adaptation
+    std::string ranger_sensor_01;
+    std::string ranger_sensor_10;
+    if(ctl.targetContact().surfaceName == "LeftFootCenter")
+    { 
+      ranger_sensor_01 = "ranger_L1";  // I say the name that then I will use to extract the data under in the two lines. 
+      ranger_sensor_10 = "ranger_L10";
+    }
+    else // if(ctl.targetContact().surfaceName == "RightFootCenter")
+    {
+      ranger_sensor_01 = "ranger_R1";
+      ranger_sensor_10 = "ranger_R10";
+    }
+    // At the end of the if, ranger_sensor_01 and ranger_sensor_10 contains the range sensor associated to the targetContact.surfaceName i.e. the foot moving
+
+    // In the following line const auto & is equal to const std::vector<double> &. auto automatically replace the type when it can be deduce automatically.
+    // The compilator knows that robot().device<mc_openrtm::RangeSensor>("NameOfSensor").data() will return a const std::vector<double> &
+    const auto & range_01 = ctl.robot().device<mc_openrtm::RangeSensor>(ranger_sensor_01).data(); // He takes the correspond right and left depending of the ContactSurface
+    const auto & range_10 = ctl.robot().device<mc_openrtm::RangeSensor>(ranger_sensor_10).data();
+
+    // check if you have data from your sensor
+    if(range_01.size() > 1 && range_10.size() > 1)
+    {
+      // Get the data from the sensor
+      range_01_ = range_01[0];
+      range_10_ = range_10[0];
+
+      mc_rtc::log::info("Data for range sensor 01 of {}: {}", ctl.targetContact().surfaceName, range_01_);
+      mc_rtc::log::info("Data for range sensor 10 of {}: {}", ctl.targetContact().surfaceName, range_10_);
+
+      double diff_between_01_10 = range_01_ - range_10_;
+
+      if(std::isnan(diff_between_01_10) || std::isinf(diff_between_01_10))
+      {
+        // Only to log 0 to show that you miss data
+        Ra_ = 0.0;
+        Rb_ = 0.0; 
+        mc_rtc::log::error("There is a nan element or infinite element");
+      }
+      else
+      {
+        // Computation for the current foot in the air, not for both 
+        const double diff_square = pow(diff_between_01_10, 2);
+        ranger_square_.push_back(diff_square);
+        // For accumulate I have to put 0.0 and not 0. 0 means it will cast everyting in int and then do the sum, so 0.000215 will be convert to 0 and then sum, that's why it did not work: sorry
+        const double sum = std::accumulate(ranger_square_.begin(), ranger_square_.end(), 0.0);
+        const double mean = std::abs(sum) / (ranger_square_.size() + 1.0);
+        Ra_ = std::sqrt(mean);
+        Rb_ = diff_between_01_10; 
+  
+        // For both feet I have a lot of negative values
+        mc_rtc::log::success("Foot in motion {}", ctl.targetContact().surfaceName);
+        mc_rtc::log::success("ranger_square_.size() : {}", ranger_square_.size());
+        mc_rtc::log::success("sum : {:.0e}", sum);
+        mc_rtc::log::success("mean : {}", mean);
+        mc_rtc::log::success("Ra_ : {}", Ra_);
+        mc_rtc::log::success("Rb_ : {}", Rb_);
+      }
+    }
+    else
+    {
+      mc_rtc::log::error("Range sensor does not have value");
+    }
+
+  }
+  
+  // if(ctl.supportContact.surfaceName == "LeftFootCenter")
+  // {
+  //   double RangeSensor_L1 = Range_L1[0];
+  //   double RangeSensor_L10 = Range_L10[0];
+  //   double RangeSensor_R1 = Range_R1[0];
+  //   double RangeSensor_R10 = Range_R10[0];
+  //   // mc_rtc::log::success("Range_L1 : {}", Range_L1[0]);
+  //   // mc_rtc::log::success("Range_L10 : {}", Range_L10[0]);
+  //   // mc_rtc::log::success("Range_R1 : {}", Range_R1[0]);
+  //   // mc_rtc::log::success("Range_R10 : {}", Range_R10[0]);
+  //   if (Range_L1.size() > 1 & Range_L10.size() > 1 & Range_R1.size() > 1 & Range_R10.size() > 1)
+  //   { 
+  //     double diff_Left = RangeSensor_L1- RangeSensor_L10;
+  //     double diff_Right = RangeSensor_R1 - RangeSensor_R10;
+  //     if(std::isinf(diff_Left))
+  //     {
+  //       diff_Left = 0.0;
+  //     }
+  //     if(std::isinf(diff_Right))
+  //     {
+  //       diff_Right = 0.0;
+  //     }
+  //     if(std::isnan(diff_Left) || std::isinf(diff_Left))
+  //     {
+  //       mc_rtc::log::error("There is a nan element or infinite element");
+  //     }
+  //     else
+  //     {
+  //       double diff_Left_square = pow(diff_Left,2);
+  //       double diff_Right_square = pow(diff_Right,2);
+  //       Range_left_square.push_back(diff_Left_square);
+  //       Range_right_square.push_back(diff_Right_square);
+  //       double sum_left = 0.0;
+  //       double sum_right = 0.0;
+  //       for(int i = 0; i < Range_left_square.size(); i++)
+  //       {
+  //         sum_left = sum_left + Range_left_square[i];
+  //       }
+  //       for(int i = 0; i < Range_right_square.size(); i++)
+  //       {
+  //         sum_right = sum_right + Range_right_square[i];
+  //       }
+  //       // double sum_left = std::accumulate(Range_left_square.begin(), Range_left_square.end(), 0);
+  //       // double sum_right = std::accumulate(Range_right_square.begin(), Range_right_square.end(), 0);
+  //       double mean_left = abs(sum_left)/Range_left_square.size();
+  //       double mean_right = abs(sum_right)/Range_right_square.size();
+  //       Ra_Left_ = sqrt(mean_left); 
+  //       Ra_Right_ = sqrt(mean_right);
+  //       Rb_Left_ = diff_Left; 
+  //       Rb_Right_ = diff_Right;
+
+  //       // mc_rtc::log::success("diff_Left : {}", diff_Left);
+  //       // // mc_rtc::log::success(" Range_left_square : {}", fmt::join( Range_left_square, ", "));
+  //       // mc_rtc::log::success("Range_left_square.size() : {}", Range_left_square.size());
+  //       // mc_rtc::log::success("sum_left : {:.0e}", sum_left);
+  //       // mc_rtc::log::success("mean_left : {}", mean_left);
+  //       // mc_rtc::log::success("Ra_Left_ : {}", Ra_Left_);
+
+        
+  //     }      
+  //   }
+  //   else
+  //   {
+  //     mc_rtc::log::error("Range sensor does not have value");
+  //   }
+  // }
+  
 }
 
 void states::SingleSupport::updateSwingFoot()
