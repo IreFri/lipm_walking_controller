@@ -31,6 +31,8 @@
 #include <lipm_walking/Controller.h>
 #include <lipm_walking/utils/clamp.h>
 
+#include <mc_openrtm/devices/RangeSensor.h>
+
 using Color = mc_rtc::gui::Color;
 
 namespace lipm_walking
@@ -464,6 +466,7 @@ void Controller::leftFootRatio(double ratio)
 }
 
 int iter = 0;
+
 bool Controller::run()
 {
   iter = iter + 1;
@@ -499,7 +502,7 @@ bool Controller::run()
 
   warnIfRobotIsInTheAir();
 
-  // Update cost
+  // // Update cost
   {
     double zmp = 0.0;
     // ZMP Error
@@ -585,31 +588,67 @@ bool Controller::run()
       // footstep_error_ = 1. / std::sqrt((static_cast<double>(nrFootsteps_) + 1.));
       footstep_error_ =  plan.contacts().size() - 2 - nrFootsteps_;
       footstep = lambda_footstep_ * footstep_error_;
-    }
+    } 
 
+    // Part relative to the variable stiffness
     // double PhalangesStiffness = 0.0;
+    // double walked_path_longitudinal = 0.0;
+    // double walked_path_transversal = 0.0;
     // // Here I use the two added joints to calculate the variable stiffness of the two feet
-    // { 
-    //   if (iter<10000)
-    //   {
-    //     robot().q()[robot().jointIndexByName("R_VARSTIFF")][0] = 0.02*iter;
-    //     robot().q()[robot().jointIndexByName("L_VARSTIFF")][0] = 0.02*iter;
-    //     //double L_VarStiff = robot().q()[robot().jointIndexByName("L_VARSTIFF")][0];
-    //     double R_VarStiff = 0.02*iter;
-    //     double L_VarStiff = 0.02*iter;
-    //     PhalangesStiffness_ = R_VarStiff;
-    //   }
-    //   else
-    //   {
-    //     robot().q()[robot().jointIndexByName("R_VARSTIFF")][0] = 1000;
-    //     robot().q()[robot().jointIndexByName("L_VARSTIFF")][0] = 1000;
-    //     //double L_VarStiff = robot().q()[robot().jointIndexByName("L_VARSTIFF")][0];
-    //     double R_VarStiff = 1000;
-    //     double L_VarStiff = 1000;
-    //     PhalangesStiffness_ = R_VarStiff;
-    //   }
-    // }
+    // if(datastore().has("SLAM::Robot")) 
+    // {
+    //   const auto & estimatedRobot = datastore().call<const mc_rbdyn::Robot &>("SLAM::Robot");
+    //   sva::PTransformd R_Foot_Robot_Pose = estimatedRobot.surfacePose("RightFootCenter");
+    //   sva::PTransformd L_Foot_Robot_Pose = estimatedRobot.surfacePose("LeftFootCenter");
+    //   sva::PTransformd Foot_Robot_Pose = sva::interpolate(R_Foot_Robot_Pose, L_Foot_Robot_Pose, 0.5);
+    //   walked_path_longitudinal = Foot_Robot_Pose.translation().x();
+    //   walked_path_transversal = Foot_Robot_Pose.translation().y();
+    //   // Here I define the joint angle limit (the same defined in vrml and urdf) and the stiffness limit
+    //   double angle_low = 0;
+    //   double angle_high = 1;
+    //   double stiffness_low = 0;
+    //   double stiffness_high = 10000;
 
+    //   //mc_rtc::log::success("walked_path_transversal : {}", walked_path_transversal);
+
+    //   if (walked_path_longitudinal>0 & walked_path_longitudinal<3.1 & walked_path_transversal>-0.2) // first part of the path (big stones)
+    //   {
+    //     //double R_VarStiff = std::sin(iter);
+    //     //double L_VarStiff = std::sin(iter);
+    //     double R_VarStiff = 55;
+    //     double L_VarStiff = 55;
+    //     // I map the angle with the stiffness value (using the limits)
+    //     robot().q()[robot().jointIndexByName("R_VARSTIFF")][0] = angle_low+(R_VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low); 
+    //     robot().q()[robot().jointIndexByName("L_VARSTIFF")][0] = angle_low+(L_VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
+    //     PhalangesStiffness_ = R_VarStiff;
+    //     //mc_rtc::log::success("angle : {}", robot().q()[robot().jointIndexByName("L_VARSTIFF")][0]);
+    //   }
+    //   else if (walked_path_longitudinal > 3.1) // second part of the path (small stones)
+    //   {
+    //     double R_VarStiff = 2;
+    //     double L_VarStiff = 2;
+    //     robot().q()[robot().jointIndexByName("R_VARSTIFF")][0] = angle_low+(R_VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
+    //     robot().q()[robot().jointIndexByName("L_VARSTIFF")][0] = angle_low+(L_VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
+    //     PhalangesStiffness_ = R_VarStiff;
+    //   }
+    //   else if (walked_path_longitudinal>0 & walked_path_longitudinal<3.1 & walked_path_transversal<-0.2) // third part of the path (cylinder obstacles)
+    //   {
+    //     double R_VarStiff = 5;
+    //     double L_VarStiff = 5;
+    //     robot().q()[robot().jointIndexByName("R_VARSTIFF")][0] = angle_low+(R_VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
+    //     robot().q()[robot().jointIndexByName("L_VARSTIFF")][0] = angle_low+(L_VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
+    //     PhalangesStiffness_ = R_VarStiff; 
+    //   }
+    //   else // last part of the path (flat ground), when walked_path_longitudinal < 0
+    //   {
+    //     double R_VarStiff = 100;
+    //     double L_VarStiff = 100;
+    //     robot().q()[robot().jointIndexByName("R_VARSTIFF")][0] = angle_low+(R_VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
+    //     robot().q()[robot().jointIndexByName("L_VARSTIFF")][0] = angle_low+(L_VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
+    //     PhalangesStiffness_ = R_VarStiff; 
+    //   }
+    // } 
+    
     // Distance between robot and final pose target 
     double Distance = 0.0;
     double error_distance = 0.0;
@@ -628,7 +667,7 @@ bool Controller::run()
         sva::PTransformd Foot_Robot_Pose = sva::interpolate(R_Foot_Robot_Pose, L_Foot_Robot_Pose, 0.5);
         foot_target_pose_ = initial_target*Foot_Robot_Pose;
 
-        mc_rtc::log::success("foot_target_pose_ : {}", foot_target_pose_.translation().head<2>().transpose());
+        //mc_rtc::log::success("foot_target_pose_ : {}", foot_target_pose_.translation().head<2>().transpose());
 
       }
       const auto & estimatedRobot = datastore().call<const mc_rbdyn::Robot &>("SLAM::Robot");
@@ -638,14 +677,15 @@ bool Controller::run()
       Distance = (foot_target_pose_.translation().head<2>()-Foot_Robot_Pose.translation().head<2>()).norm();
       error_distance = lambda_distance_ * Distance;
 
-      //mc_rtc::log::success("foot_target_pose_ : {}, Foot_Robot_Pose : {}, error_distance : {}", foot_target_pose_.translation().head<2>().transpose(), Foot_Robot_Pose.translation().head<2>().transpose(), error_distance);
-      mc_rtc::log::success("Distance : {}", Distance);
+      //mc_rtc::log::success("Foot_Robot_Pose : {}", Foot_Robot_Pose.translation().head<2>());
+      //mc_rtc::log::success("Foot_Robot_Pose : {}", Foot_Robot_Pose.translation()[2]);
+      //mc_rtc::log::success("Distance : {}", Distance);
 
     }
 
     cost_ = - error_distance - zmp - CoM;
-    //cost_ = - error_distance - zmp - R_Ankle_P_Torque - L_Ankle_P_Torque;
-    //cost_ = - footstep - zmp - CoM;
+    cost_ = - error_distance - zmp - R_Ankle_P_Torque - L_Ankle_P_Torque;
+    cost_ = - footstep - zmp - CoM;
     //mc_rtc::log::success("Foot_Target_Pose : {}, Foot_Robot_Pose : {}, error_distance : {}", Foot_Target_Pose.translation().head<2>(), Foot_Robot_Pose.translation().head<2>(), error_distance);
   }
   

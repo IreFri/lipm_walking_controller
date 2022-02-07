@@ -43,6 +43,7 @@ project(${PROJECT_NAME} CXX)
 add_project_dependency(copra REQUIRED)
 add_project_dependency(mc_rtc REQUIRED)
 add_project_dependency(eigen-quadprog REQUIRED)
+add_project_dependency(mc_openrtm REQUIRED)
 
 if(EXISTS "${MC_RTC_LIBDIR}/mc_controller/etc/LIPMWalking.conf")
   message(FATAL_ERROR "\n \
@@ -53,3 +54,4 @@ if(EXISTS "${MC_RTC_LIBDIR}/mc_controller/etc/LIPMWalking.conf")
 endif()
 
 add_subdirectory(src)
+add_subdirectory(choreonoid_plugin)
