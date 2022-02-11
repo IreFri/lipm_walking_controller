@@ -140,6 +140,14 @@ void states::Standing::teardown()
 
 void states::Standing::runState()
 {
+  // TODO: Comment/Uncomment to start automatically BAYESIAN
+  // static int counter = 0;
+  // ++ counter;
+  // if(counter == 50)
+  // {
+  //   startWalking();
+  // }
+  
   checkPlanUpdates();
 
   auto & ctl = controller();

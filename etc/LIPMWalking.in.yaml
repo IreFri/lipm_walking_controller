@@ -2669,20 +2669,24 @@ ObserverPipelines:
         # Floating base kinematic-inertial state observation
       - type: KinematicInertial
         # Floating base Groundtruth
+      - type: Attitude
+        # Floating base Groundtruth
       - type: BodySensor
         update: false
         config:
           bodySensor: FloatingBase
-      - type: SLAM
-        update: true
-        config:
-          Robot:
-            hrp4j_soft:
-              camera: base_link
-            hrp4j:
-              camera: base_link
-          SLAM:
-            map: map
-            estimated: WAIST_camera_link
-          Filter:
-            use: false
+      # - type: SLAM
+      #   update: true
+      #   config:
+      #     Robot:
+      #       hrp4j_soft:
+      #         camera: base_link
+      #       hrp4j:
+      #         camera: base_link
+      #       hrp4cr:
+      #         camera: BODY
+      #     SLAM:
+      #       map: map
+      #       estimated: WAIST_camera_link
+      #     Filter:
+      #       use: false

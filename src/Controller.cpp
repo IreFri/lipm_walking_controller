@@ -30,9 +30,6 @@
 
 #include <lipm_walking/Controller.h>
 #include <lipm_walking/utils/clamp.h>
-
-#include <mc_openrtm/devices/RangeSensor.h>
-
 using Color = mc_rtc::gui::Color;
 
 namespace lipm_walking
