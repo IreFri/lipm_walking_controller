@@ -69,9 +69,9 @@ robot_models:
         withDCMBias: true
       dcm_tracking:
         gains:
-          prop: 5.0 # 3.0
+          prop: @P_STABILIZER@ # 5.0
           integral: 0.0
-          deriv: 2.0 # 0.5
+          deriv: @D_STABILIZER@ # 2.0
         derivator_time_constant: 1.0
         integrator_time_constant: 10.0
   hrp4:
@@ -106,9 +106,9 @@ robot_models:
         withDCMBias: true
       dcm_tracking:
         gains:
-          prop: 3.0 # 3.0
+          prop: @P_STABILIZER@ # 3.0
           integral: 0.0 # 20.0
-          deriv: 1 # 0.5
+          deriv: @D_STABILIZER@ # 0.5
         derivator_time_constant: 1.0
         integrator_time_constant: 10.0
   hrp4cr:
@@ -1354,8 +1354,8 @@ plans:
       double_support_duration: 0.4
       single_support_duration: 0.7
       step_length: 0.15
-      swing_height: 0.04
-      com_height: 0.78
+      swing_height: 0.08
+      com_height: 0.77
       contacts:
         - pose:
             translation: [0.0, -0.07, 0.0]
@@ -1709,123 +1709,6 @@ plans:
           surface: RightFootCenter
         - pose:
             translation: [0.035, 0.09, 0.0]
-          surface: LeftFootCenter
-  hrp4j:
-    ashibumi: # stepping in place
-      double_support_duration: 0.5
-      single_support_duration: 0.8
-      com_height: 0.75
-      swing_height: 0.04
-      contacts:
-        - pose:
-            translation: [0.035, -0.07, 0.0]
-          surface: RightFootCenter
-        - pose:
-            translation: [0.035, 0.07, 0.0]
-          surface: LeftFootCenter
-        - pose:
-            translation: [0.035, -0.07, 0.0]
-          surface: RightFootCenter
-        - pose:
-            translation: [0.035, 0.07, 0.0]
-          surface: LeftFootCenter
-        - pose:
-            translation: [0.035, -0.07, 0.0]
-          surface: RightFootCenter
-        - pose:
-            translation: [0.035, 0.07, 0.0]
-          surface: LeftFootCenter
-        - pose:
-            translation: [0.035, -0.07, 0.0]
-          surface: RightFootCenter
-        - pose:
-            translation: [0.035, 0.07, 0.0]
-          surface: LeftFootCenter
-        - pose:
-            translation: [0.035, -0.07, 0.0]
-          surface: RightFootCenter
-        - pose:
-            translation: [0.035, 0.07, 0.0]
-          surface: LeftFootCenter
-        - pose:
-            translation: [0.035, -0.07, 0.0]
-          surface: RightFootCenter
-        - pose:
-            translation: [0.035, 0.07, 0.0]
-          surface: LeftFootCenter
-    custom_backward:
-      double_support_duration: 0.5
-      single_support_duration: 0.8
-      step_length: 0.1
-      swing_height: 0.05
-      com_height: 0.75
-      contacts:
-        - pose:
-            translation: [0.0, -0.07, 0.0]
-          surface: RightFootCenter
-        - pose:
-            translation: [0.0, 0.07, 0.0]
-          surface: LeftFootCenter
-    custom_forward:
-      double_support_duration: 0.4
-      single_support_duration: 0.7
-      step_length: 0.15
-      swing_height: 0.04
-      com_height: 0.75
-      contacts:
-        - pose:
-            translation: [0.0, -0.07, 0.0]
-          surface: RightFootCenter
-        - pose:
-            translation: [0.0, 0.07, 0.0]
-          surface: LeftFootCenter
-    custom_lateral:
-      double_support_duration: 0.4
-      single_support_duration: 0.7
-      step_length: 0.1
-      swing_height: 0.04
-      com_height: 0.75
-      contacts:
-        - pose:
-            translation: [0.0, -0.07, 0.0]
-          surface: RightFootCenter
-        - pose:
-            translation: [0.0, 0.07, 0.0]
-          surface: LeftFootCenter
-      mpc:
-        weights:
-          jerk: 1.0
-          vel: [10.0, 300.0]
-          zmp: 1000.0
-    warmup:
-      double_support_duration: 0.5
-      single_support_duration: 0.7
-      swing_height: 0.04
-      com_height: 0.75
-      contacts:
-        - pose:
-            translation: [0.035, -0.07, 0.0]
-          surface: RightFootCenter
-        - pose:
-            translation: [0.035, 0.07, 0.0]
-          surface: LeftFootCenter
-        - pose:
-            translation: [0.035, -0.07, 0.0]
-          surface: RightFootCenter
-        - pose:
-            translation: [0.035, 0.07, 0.0]
-          surface: LeftFootCenter
-    external:
-      double_support_duration: 0.5
-      single_support_duration: 0.7
-      swing_height: 0.04
-      com_height: 0.75
-      contacts:
-        - pose:
-            translation: [0.035, -0.07, 0.0]
-          surface: RightFootCenter
-        - pose:
-            translation: [0.035, 0.07, 0.0]
           surface: LeftFootCenter
   hrp4cr:
     ashibumi: # stepping in place

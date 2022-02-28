@@ -65,6 +65,9 @@ install(TARGETS ${PROJECT_NAME}
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib)
 
+set(P_STABILIZER "3" CACHE STRING "Define the proportional gain")
+set(D_STABILIZER "0.5" CACHE STRING "Define the derivate gain")
+
 install(
   DIRECTORY ${CMAKE_SOURCE_DIR}/include/ DESTINATION include)
 
