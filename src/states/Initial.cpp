@@ -95,12 +95,14 @@ bool states::Initial::checkTransitions()
 void states::Initial::showStartStandingButton()
 {
   // TODO: Comment/Uncomment to start automatically BAYESIAN
-  // static int counter = 0;
-  // ++ counter;
-  // if(counter == 50)
-  // {
-  //   startStanding_ = true;
-  // }
+  static int counter = 0;
+  ++ counter;
+  if(counter == 50)
+  {
+    startStanding_ = true;
+  }
+
+
   if(!startStandingButton_ && gui())
   {
     using namespace mc_rtc::gui;

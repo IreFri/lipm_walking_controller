@@ -680,8 +680,8 @@ bool Controller::run()
 
     }
 
-    cost_ = - error_distance - zmp - CoM;
-    cost_ = - error_distance - zmp - R_Ankle_P_Torque - L_Ankle_P_Torque;
+    // cost_ = - error_distance - zmp - CoM;
+    // cost_ = - error_distance - zmp - R_Ankle_P_Torque - L_Ankle_P_Torque;
     cost_ = - footstep - zmp - CoM;
     //mc_rtc::log::success("Foot_Target_Pose : {}, Foot_Robot_Pose : {}, error_distance : {}", Foot_Target_Pose.translation().head<2>(), Foot_Robot_Pose.translation().head<2>(), error_distance);
   }
