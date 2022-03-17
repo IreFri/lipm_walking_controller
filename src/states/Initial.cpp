@@ -64,8 +64,8 @@ void states::Initial::teardown()
 void states::Initial::runState()
 {
   auto & ctl = controller();
-  // postureTaskIsActive_ = false; // when I have variable stiffness
-  postureTaskIsActive_ = (ctl.postureTask->speed().norm() > 1e-2); // when I have fixed stiffness
+  postureTaskIsActive_ = false; // when I have variable stiffness
+  // postureTaskIsActive_ = (ctl.postureTask->speed().norm() > 1e-2); // when I have fixed stiffness
   if(postureTaskIsActive_)
   {
     hideStartStandingButton();

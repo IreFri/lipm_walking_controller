@@ -32,6 +32,9 @@
 #include <lipm_walking/utils/clamp.h>
 using Color = mc_rtc::gui::Color;
 
+#include <mc_mujoco/devices/RangeSensor.h>
+
+
 namespace lipm_walking
 {
 
@@ -227,8 +230,11 @@ Controller::Controller(std::shared_ptr<mc_rbdyn::RobotModule> robotModule,
   gui()->addElement({"Walking", "Main"}, mc_rtc::gui::Label("cost", [this]() { return this->cost_; }));
   logger().addLogEntry("cost", [this]() { return cost_; });
 
-  gui()->addElement({"Walking", "Main"}, mc_rtc::gui::Label("PhalangesStiffness", [this]() { return this->PhalangesStiffness_; }));
-  logger().addLogEntry("PhalangesStiffness", [this]() { return PhalangesStiffness_; });
+  gui()->addElement({"Walking", "Main"}, mc_rtc::gui::Label("RightPhalangesStiffness", [this]() { return this->RightPhalangesStiffness_; }));
+  logger().addLogEntry("RightPhalangesStiffness", [this]() { return RightPhalangesStiffness_; });
+
+  gui()->addElement({"Walking", "Main"}, mc_rtc::gui::Label("LeftPhalangesStiffness", [this]() { return this->LeftPhalangesStiffness_; }));
+  logger().addLogEntry("LeftPhalangesStiffness", [this]() { return LeftPhalangesStiffness_; });
 
   mc_rtc::log::success("LIPMWalking controller init done.");
 }
@@ -541,42 +547,7 @@ bool Controller::run()
       CoM = lambda_CoM_ * mean + lambda_CoM_ * lambda_CoM_ * stdev;
     }
 
-    double R_Ankle_P_Torque = 0.0;
-    double L_Ankle_P_Torque = 0.0;
-    double R_Ankle_P_Torque_real = 0.0;
-    double L_Ankle_P_Torque_real = 0.0;
-    //double R_Ankle_P_Torque_target = 0.0;
-    //double L_Ankle_P_Torque_target = 0.0;
-    // Right and Left ankle pitch torque error
-    // {
-    //   R_Ankle_P_Torque_real = robot().jointTorques()[robot().jointIndexByName("R_ANKLE_P")]; //Torques is the real data, Torque is the target data
-    //   L_Ankle_P_Torque_real = robot().jointTorques()[robot().jointIndexByName("L_ANKLE_P")];  
-    //   //R_Ankle_P_Torque_target = robot().jointTorque()[robot().jointIndexByName("R_ANKLE_P")][0]; 
-    //   //L_Ankle_P_Torque_target = robot().jointTorque()[robot().jointIndexByName("L_ANKLE_P")][0];   
-    //   //const double R_Ankle_P_Torque_error = R_Ankle_P_Torque_target - R_Ankle_P_Torque_target;
-    //   //const double L_Ankle_P_Torque_error = L_Ankle_P_Torque_target - L_Ankle_P_Torque_target;
-
-    //   //R_Ankle_P_Torque_.push_back(R_Ankle_P_Torque_error);
-    //   R_Ankle_P_Torque_.push_back(R_Ankle_P_Torque_real);
-    //   double sum_R = std::accumulate(R_Ankle_P_Torque_.begin(), R_Ankle_P_Torque_.end(), 0.0);
-    //   double mean_R = sum_R / R_Ankle_P_Torque_.size();
-    //   std::vector<double> diff_R(R_Ankle_P_Torque_.size());
-    //   std::transform(R_Ankle_P_Torque_.begin(), R_Ankle_P_Torque_.end(), diff_R.begin(), [mean_R](double x) { return x - mean_R; });
-    //   double sq_sum_R = std::inner_product(diff_R.begin(), diff_R.end(), diff_R.begin(), 0.0);
-    //   double stdev_R = std::sqrt(sq_sum_R / R_Ankle_P_Torque_.size());
-    //   R_Ankle_P_Torque = std::abs(lambda_R_Ankle_P_Torque_ * mean_R + lambda_R_Ankle_P_Torque_ * lambda_R_Ankle_P_Torque_ * stdev_R);
-
-    //   //L_Ankle_P_Torque_.push_back(L_Ankle_P_Torque_error);
-    //   L_Ankle_P_Torque_.push_back(L_Ankle_P_Torque_real);
-    //   double sum_L = std::accumulate(L_Ankle_P_Torque_.begin(), L_Ankle_P_Torque_.end(), 0.0);
-    //   double mean_L = sum_L / L_Ankle_P_Torque_.size();
-    //   std::vector<double> diff_L(L_Ankle_P_Torque_.size());
-    //   std::transform(L_Ankle_P_Torque_.begin(), L_Ankle_P_Torque_.end(), diff_L.begin(), [mean_L](double x) { return x - mean_L; });
-    //   double sq_sum_L = std::inner_product(diff_L.begin(), diff_L.end(), diff_L.begin(), 0.0);
-    //   double stdev_L = std::sqrt(sq_sum_L / L_Ankle_P_Torque_.size());
-    //   L_Ankle_P_Torque = std::abs(lambda_L_Ankle_P_Torque_ * mean_L + lambda_L_Ankle_P_Torque_ * lambda_L_Ankle_P_Torque_ * stdev_L);
-
-    // }
+    
 
     double footstep = 0.0;
     // Footstep
@@ -585,9 +556,10 @@ bool Controller::run()
       // footstep_error_ = 1. / std::sqrt((static_cast<double>(nrFootsteps_) + 1.));
       footstep_error_ =  plan.contacts().size() - 2 - nrFootsteps_;
       footstep = lambda_footstep_ * footstep_error_;
-    } 
+    }
 
-    // Part relative to the variable stiffness
+    // // Part relative to the variable stiffness
+
     // double PhalangesStiffness = 0.0;
     // double walked_path_longitudinal = 0.0;
     // double walked_path_transversal = 0.0;
@@ -604,7 +576,7 @@ bool Controller::run()
     //   double angle_low = 0;
     //   double angle_high = 1;
     //   double stiffness_low = 0;
-    //   double stiffness_high = 10000;
+    //   double stiffness_high = 100;
 
     //   //mc_rtc::log::success("walked_path_transversal : {}", walked_path_transversal);
 
@@ -612,8 +584,8 @@ bool Controller::run()
     //   {
     //     //double R_VarStiff = std::sin(iter);
     //     //double L_VarStiff = std::sin(iter);
-    //     double R_VarStiff = 55;
-    //     double L_VarStiff = 55;
+    //     double R_VarStiff = 5.5;
+    //     double L_VarStiff = 5.5;
     //     // I map the angle with the stiffness value (using the limits)
     //     robot().q()[robot().jointIndexByName("R_VARSTIFF")][0] = angle_low+(R_VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low); 
     //     robot().q()[robot().jointIndexByName("L_VARSTIFF")][0] = angle_low+(L_VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
@@ -638,54 +610,51 @@ bool Controller::run()
     //   }
     //   else // last part of the path (flat ground), when walked_path_longitudinal < 0
     //   {
-    //     double R_VarStiff = 100;
-    //     double L_VarStiff = 100;
+    //     double R_VarStiff = 10;
+    //     double L_VarStiff = 10;
     //     robot().q()[robot().jointIndexByName("R_VARSTIFF")][0] = angle_low+(R_VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
     //     robot().q()[robot().jointIndexByName("L_VARSTIFF")][0] = angle_low+(L_VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
     //     PhalangesStiffness_ = R_VarStiff; 
     //   }
     // } 
-    
-    // Distance between robot and final pose target 
-    double Distance = 0.0;
-    double error_distance = 0.0;
-    if(datastore().has("SLAM::Robot"))   
-    {
-      if(!init_distance)
-      {
-        init_distance = true;
-        const std::vector<Contact> & ListContacts = plan.contacts();
-        sva::PTransformd Foot_Target_Pose = sva::interpolate(ListContacts[ListContacts.size()-2].pose, ListContacts[ListContacts.size()-1].pose, 0.5);
-        sva::PTransformd Foot_Target_Initial_Pose = sva::interpolate(ListContacts[0].pose, ListContacts[1].pose, 0.5);
-        sva::PTransformd initial_target = Foot_Target_Pose*Foot_Target_Initial_Pose.inv();
-        const auto & estimatedRobot = datastore().call<const mc_rbdyn::Robot &>("SLAM::Robot");
-        sva::PTransformd R_Foot_Robot_Pose = estimatedRobot.surfacePose("RightFootCenter");
-        sva::PTransformd L_Foot_Robot_Pose = estimatedRobot.surfacePose("LeftFootCenter");
-        sva::PTransformd Foot_Robot_Pose = sva::interpolate(R_Foot_Robot_Pose, L_Foot_Robot_Pose, 0.5);
-        foot_target_pose_ = initial_target*Foot_Robot_Pose;
 
-        //mc_rtc::log::success("foot_target_pose_ : {}", foot_target_pose_.translation().head<2>().transpose());
-
-      }
-      const auto & estimatedRobot = datastore().call<const mc_rbdyn::Robot &>("SLAM::Robot");
-      sva::PTransformd R_Foot_Robot_Pose = estimatedRobot.surfacePose("RightFootCenter");
-      sva::PTransformd L_Foot_Robot_Pose = estimatedRobot.surfacePose("LeftFootCenter");
-      sva::PTransformd Foot_Robot_Pose = sva::interpolate(R_Foot_Robot_Pose, L_Foot_Robot_Pose, 0.5);
-      Distance = (foot_target_pose_.translation().head<2>()-Foot_Robot_Pose.translation().head<2>()).norm();
-      error_distance = lambda_distance_ * Distance;
-
-      //mc_rtc::log::success("Foot_Robot_Pose : {}", Foot_Robot_Pose.translation().head<2>());
-      //mc_rtc::log::success("Foot_Robot_Pose : {}", Foot_Robot_Pose.translation()[2]);
-      //mc_rtc::log::success("Distance : {}", Distance);
-
-    }
-
-    // cost_ = - error_distance - zmp - CoM;
-    // cost_ = - error_distance - zmp - R_Ankle_P_Torque - L_Ankle_P_Torque;
     cost_ = - footstep - zmp - CoM;
     //mc_rtc::log::success("Foot_Target_Pose : {}, Foot_Robot_Pose : {}, error_distance : {}", Foot_Target_Pose.translation().head<2>(), Foot_Robot_Pose.translation().head<2>(), error_distance);
   }
+
+
+
+
+  // Solution to modify the variable stiffness
+  {
+    double R_VarStiff = 0;
+    double L_VarStiff = 0;
+    
+    auto stiffnessToAngle = [this](double VarStiff) 
+      {
+        double angle_low = 0;
+        double angle_high = 1;
+        double stiffness_low = 0;
+        double stiffness_high = 100;
+        return angle_low+(VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
+      };
+
+    std::string ranger_sensor_R = "RightFootRangeSensor";
+    std::string ranger_sensor_L = "LeftFootRangeSensor";
+    const double range_R = robot().device<mc_mujoco::RangeSensor>(ranger_sensor_R).data();
+    const double range_L = robot().device<mc_mujoco::RangeSensor>(ranger_sensor_L).data();
+    // std::cout << "  range_R:   " << range_R;
+    R_VarStiff = range_R*100;
+    L_VarStiff = range_L*100;
+    RightPhalangesStiffness_ = R_VarStiff; 
+    LeftPhalangesStiffness_ = L_VarStiff; 
+    robot().q()[robot().jointIndexByName("L_VARSTIFF")][0] = stiffnessToAngle(L_VarStiff);
+    robot().q()[robot().jointIndexByName("R_VARSTIFF")][0] = stiffnessToAngle(R_VarStiff);
+  }
   
+
+
+
   bool ret = mc_control::fsm::Controller::run();
   if(mc_control::fsm::Controller::running())
   {

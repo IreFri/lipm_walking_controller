@@ -95,6 +95,8 @@ void states::Standing::start()
       lastInterpolatorIter_++;
       updatePlan(plan);
     }
+
+    counter_ = 0;
   }
 
   if(gui())
@@ -141,9 +143,8 @@ void states::Standing::teardown()
 void states::Standing::runState()
 {
   // TODO: Comment/Uncomment to start automatically BAYESIAN
-  static int counter = 0;
-  ++ counter;
-  if(counter == 50)
+  ++ counter_;
+  if(counter_ >= 50)
   {
     startWalking();
   }

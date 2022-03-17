@@ -105,6 +105,7 @@ private:
   bool startWalking_; /**< Has the user clicked on "Start walking"? */
   double leftFootRatio_; /**< Left foot ratio from GUI input */
   unsigned lastInterpolatorIter_; /**< Last iteration number of the plan interpolator */
+  int counter_ = 0;
 };
 
 } // namespace states
