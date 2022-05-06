@@ -646,8 +646,8 @@ bool Controller::run()
     // std::cout << "  range_R:   " << range_R;
     R_VarStiff = range_R*100;
     L_VarStiff = range_L*100;
-    RightPhalangesStiffness_ = R_VarStiff; 
-    LeftPhalangesStiffness_ = L_VarStiff; 
+    RightPhalangesStiffness_ = range_R*100; 
+    LeftPhalangesStiffness_ = range_L*100;
     robot().q()[robot().jointIndexByName("L_VARSTIFF")][0] = stiffnessToAngle(L_VarStiff);
     robot().q()[robot().jointIndexByName("R_VARSTIFF")][0] = stiffnessToAngle(R_VarStiff);
   }

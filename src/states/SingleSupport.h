@@ -89,11 +89,21 @@ private:
   std::shared_ptr<mc_tasks::SurfaceTransformTask> swingFootTask; /**< Current swing foot task from the stabilizer */
 
   //SoftFoot 
-  double Ra_;
-  double Rb_;
-  std::vector<double> ranger_square_;
-  double range_01_;
-  double range_10_;
+  double Sp_;
+  double P_; 
+  double P2_;
+  double Sku3_;
+  double P3_;
+  double Sp3_;
+
+  double range_;
+  double x_pointGround_;
+  double y_pointGround_;
+  double z_pointGround_;
+  std::vector<double> altitudeGround_;
+  double profile_;
+  double profileFiltered_;
+  bool isStiffnessUpdated_;
 
 };
 
