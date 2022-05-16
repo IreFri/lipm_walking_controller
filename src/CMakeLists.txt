@@ -23,6 +23,8 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+find_package(variable_stiffness REQUIRED)
+
 set(CONTROLLER_SRC
     Controller.cpp
     FootstepPlan.cpp
@@ -45,8 +47,8 @@ set(CONTROLLER_HDR
     ${CMAKE_SOURCE_DIR}/include/lipm_walking/utils/slerp.h)
 
 add_library(${PROJECT_NAME} SHARED ${CONTROLLER_SRC} ${CONTROLLER_HDR})
-target_include_directories(${PROJECT_NAME} PUBLIC $<INSTALL_INTERFACE:include> $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
-target_link_libraries(${PROJECT_NAME} PUBLIC copra::copra eigen-quadprog::eigen-quadprog mc_rtc::mc_control_fsm mc_rtc::mc_planning mc_mujoco::devices)
+target_include_directories(${PROJECT_NAME} PUBLIC $<INSTALL_INTERFACE:include> $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include> ${variable_stiffness_INCLUDE_DIRS})
+target_link_libraries(${PROJECT_NAME} PUBLIC copra::copra eigen-quadprog::eigen-quadprog mc_rtc::mc_control_fsm mc_rtc::mc_planning mc_mujoco::devices mc_rtc::mc_rtc_ros)
 install(TARGETS ${PROJECT_NAME} DESTINATION "${MC_RTC_LIBDIR}")
 
 add_controller(${PROJECT_NAME}_controller lib.cpp "")

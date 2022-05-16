@@ -340,9 +340,6 @@ public: /* visible to FSM states */
 
   unsigned int nrFootsteps_ = 0;
 
-  double RightPhalangesStiffness_ = 0.0;
-  double LeftPhalangesStiffness_ = 0.0;
-
   FootstepPlan plan; /**< Current footstep plan */
   PlanInterpolator planInterpolator; /**< Footstep plan interpolator */
   bool emergencyStop = false; /**< Emergency flag: if on, the controller stops doing anything */

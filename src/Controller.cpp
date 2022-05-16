@@ -230,12 +230,6 @@ Controller::Controller(std::shared_ptr<mc_rbdyn::RobotModule> robotModule,
   gui()->addElement({"Walking", "Main"}, mc_rtc::gui::Label("cost", [this]() { return this->cost_; }));
   logger().addLogEntry("cost", [this]() { return cost_; });
 
-  gui()->addElement({"Walking", "Main"}, mc_rtc::gui::Label("RightPhalangesStiffness", [this]() { return this->RightPhalangesStiffness_; }));
-  logger().addLogEntry("RightPhalangesStiffness", [this]() { return RightPhalangesStiffness_; });
-
-  gui()->addElement({"Walking", "Main"}, mc_rtc::gui::Label("LeftPhalangesStiffness", [this]() { return this->LeftPhalangesStiffness_; }));
-  logger().addLogEntry("LeftPhalangesStiffness", [this]() { return LeftPhalangesStiffness_; });
-
   mc_rtc::log::success("LIPMWalking controller init done.");
 }
 
@@ -626,31 +620,31 @@ bool Controller::run()
 
 
   // Solution to modify the variable stiffness
-  {
-    double R_VarStiff = 0;
-    double L_VarStiff = 0;
+  // {
+  //   double R_VarStiff = 0;
+  //   double L_VarStiff = 0;
     
-    auto stiffnessToAngle = [this](double VarStiff) 
-      {
-        double angle_low = 0;
-        double angle_high = 1;
-        double stiffness_low = 0;
-        double stiffness_high = 100;
-        return angle_low+(VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
-      };
+  //   auto stiffnessToAngle = [this](double VarStiff) 
+  //     {
+  //       double angle_low = 0;
+  //       double angle_high = 1;
+  //       double stiffness_low = 0;
+  //       double stiffness_high = 100;
+  //       return angle_low+(VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
+  //     };
 
-    std::string ranger_sensor_R = "RightFootRangeSensor";
-    std::string ranger_sensor_L = "LeftFootRangeSensor";
-    const double range_R = robot().device<mc_mujoco::RangeSensor>(ranger_sensor_R).data();
-    const double range_L = robot().device<mc_mujoco::RangeSensor>(ranger_sensor_L).data();
-    // std::cout << "  range_R:   " << range_R;
-    R_VarStiff = range_R*100;
-    L_VarStiff = range_L*100;
-    RightPhalangesStiffness_ = range_R*100; 
-    LeftPhalangesStiffness_ = range_L*100;
-    robot().q()[robot().jointIndexByName("L_VARSTIFF")][0] = stiffnessToAngle(L_VarStiff);
-    robot().q()[robot().jointIndexByName("R_VARSTIFF")][0] = stiffnessToAngle(R_VarStiff);
-  }
+  //   std::string ranger_sensor_R = "RightFootRangeSensor";
+  //   std::string ranger_sensor_L = "LeftFootRangeSensor";
+  //   const double range_R = robot().device<mc_mujoco::RangeSensor>(ranger_sensor_R).data();
+  //   const double range_L = robot().device<mc_mujoco::RangeSensor>(ranger_sensor_L).data();
+  //   // std::cout << "  range_R:   " << range_R;
+  //   R_VarStiff = range_R*100;
+  //   L_VarStiff = range_L*100;
+  //   RightPhalangesStiffness_ = range_R*100; 
+  //   LeftPhalangesStiffness_ = range_L*100;
+  //   robot().q()[robot().jointIndexByName("L_VARSTIFF")][0] = stiffnessToAngle(L_VarStiff);
+  //   robot().q()[robot().jointIndexByName("R_VARSTIFF")][0] = stiffnessToAngle(R_VarStiff);
+  // }
   
 
 

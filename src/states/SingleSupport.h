@@ -27,6 +27,8 @@
 
 #pragma once
 
+#include <mc_rtc/ros.h>
+#include <ros/ros.h>
 #include <mc_control/fsm/Controller.h>
 #include <mc_control/fsm/State.h>
 #include <mc_tasks/CoPTask.h>
@@ -104,6 +106,9 @@ private:
   double profile_;
   double profileFiltered_;
   bool isStiffnessUpdated_;
+  double k_;
+
+  ros::ServiceClient client_; 
 
 };
 

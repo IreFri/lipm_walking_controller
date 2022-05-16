@@ -30,14 +30,18 @@
 #include <mc_mujoco/devices/RangeSensor.h>
 
 #include <mc_rbdyn/BodySensor.h>
-#include "Iir.h"
-
+#include <mc_rtc/ros.h>
+#include <ros/ros.h>
+#include <variable_stiffness/connectionFile.h>
+#include <cstdlib>
 
 namespace lipm_walking
 { 
 
 void states::SingleSupport::start()
 {
+  client_ = mc_rtc::ROSBridge::get_node_handle()->serviceClient<variable_stiffness::connectionFile>("connectionFile");
+  
   auto & ctl = controller();
   auto & supportContact = ctl.supportContact();
   auto & targetContact = ctl.targetContact();
@@ -79,9 +83,12 @@ void states::SingleSupport::start()
   logger().addLogEntry("MyMeasuresInSSP_xpointGround_"+targetContact.surfaceName, [this]() { return x_pointGround_; });
   logger().addLogEntry("MyMeasuresInSSP_ypointGround_"+targetContact.surfaceName, [this]() { return y_pointGround_; });
   logger().addLogEntry("MyMeasuresInSSP_zpointGround_"+targetContact.surfaceName, [this]() { return z_pointGround_; });
-  logger().addLogEntry("MyMeasuresInSSP_profile_"+targetContact.surfaceName, [this]() { return profile_; });
-  logger().addLogEntry("MyMeasuresInSSP_profileFiltered_"+targetContact.surfaceName, [this]() { return profileFiltered_; }); 
   logger().addLogEntry("MyMeasuresInSSP_altitudeGround_"+targetContact.surfaceName, [this]() { return altitudeGround_; });
+  
+  gui()->addElement({"Walking", "Main"}, mc_rtc::gui::Label("k", [this]() { return this->k_; }));
+  logger().addLogEntry("MyMeasuresInSSP_k_"+targetContact.surfaceName, [this]() { return k_; });
+
+  // logger().addLogEntry("k", [this]() { return k_; });
 
   swingFoot_.addLogEntries(logger());
 
@@ -101,9 +108,10 @@ void states::SingleSupport::teardown()
   logger().removeLogEntry("MyMeasuresInSSP_xpointGround_"+targetContact.surfaceName);
   logger().removeLogEntry("MyMeasuresInSSP_ypointGround_"+targetContact.surfaceName);
   logger().removeLogEntry("MyMeasuresInSSP_zpointGround_"+targetContact.surfaceName);
-  logger().removeLogEntry("MyMeasuresInSSP_profile_"+targetContact.surfaceName);
-  logger().removeLogEntry("MyMeasuresInSSP_profileFiltered_"+targetContact.surfaceName);
   logger().removeLogEntry("MyMeasuresInSSP_altitudeGround_"+targetContact.surfaceName);
+
+  logger().removeLogEntry("MyMeasuresInSSP_k_"+targetContact.surfaceName);  
+  gui()->removeElement({"Walking", "Main"}, "k");
   
   swingFoot_.removeLogEntries(logger());
 
@@ -154,13 +162,16 @@ void states::SingleSupport::runState()
     // SoftFoot: calculate ground roughness with range sensors 
 
     std::string SensorName;
+    std::string jointName;
     if(ctl.targetContact().surfaceName == "LeftFootCenter") // This is the name "LeftFootCenter" or "RightFootCenter"
     {
       SensorName = "LeftFootRangeSensor";
+      jointName = "L_VARSTIFF";
     }
     else
     {
       SensorName = "RightFootRangeSensor";
+      jointName = "R_VARSTIFF";
     }
 
     // Return the parent body of the sensor (phalanx)
@@ -177,43 +188,42 @@ void states::SingleSupport::runState()
     y_pointGround_ = X_0_m.translation().y();
     z_pointGround_ = X_0_m.translation().z();
 
-    if(remTime_ > 0.25*duration_)
+    if(remTime_ > 0.25*duration_) // Phase 1
     {
       altitudeGround_.push_back(z_pointGround_);
+      k_ = 10;
     }
-    else if(!isStiffnessUpdated_)
+    else if(!isStiffnessUpdated_) // Phase 2
     {
       isStiffnessUpdated_ = true;
-    }
-    
-    if(std::isnan(range_))
-    {
-      // Log 0 to show that you miss data
-      Sp_ = 0.0;
-      P_ = 0.0; 
-      P2_ = 0.0;
-      Sku3_ = 0.0;
-      P3_ = 0.0;
-      Sp3_ = 0.0;
-      mc_rtc::log::error("There is a nan element to range meausure");
-    }
-    else
-    {   
-      
-      // Filter the profile
-      const int order = 2; // 4th order (=2 biquads)
-      Iir::ChebyshevI::LowPass<order> f;
-      const float passband_ripple_in_db = 0.1;
-      const float footLenght = 0.13891;
-      const float cutoff_frequency = 1/footLenght;
-      const float samplingrate = 50;
-      f.setup (samplingrate, cutoff_frequency, passband_ripple_in_db);
-      // profileFiltered_ = f.filter(profile_); 
+      variable_stiffness::connectionFile srv;
+      srv.request.profile = altitudeGround_;
 
-    }
+      if (client_.call(srv))
+      {
+        ROS_INFO("Stiffness: %f", (double)srv.response.stiffness);
+        k_ = srv.response.stiffness;
+        // Solution to modify the variable stiffness
+        auto stiffnessToAngle = [this](double VarStiff) 
+          {
+            double angle_low = 0;
+            double angle_high = 1;
+            double stiffness_low = 0;
+            double stiffness_high = 100;
+            return angle_low+(VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
+          };
+        ctl.robot().q()[ctl.robot().jointIndexByName(jointName)][0] = stiffnessToAngle(k_);
+      }
+      else
+      {
+        ROS_ERROR("Failed to call service connectionFile");
+      }
+      
+    }  
   }
 
-  
+
+
 }
 
 void states::SingleSupport::updateSwingFoot()
