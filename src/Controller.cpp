@@ -223,13 +223,6 @@ Controller::Controller(std::shared_ptr<mc_rbdyn::RobotModule> robotModule,
     );
   }
 
-  // std::string ranger_sensor_R = "RightFootRangeSensor";
-  //     std::string ranger_sensor_L = "LeftFootRangeSensor";
-  //     double angle_L = robot().q()[robot().jointIndexByName("L_VARSTIFF")][0];
-  //     double angle_R = robot().q()[robot().jointIndexByName("R_VARSTIFF")][0];
-  //     k_left = angleToStiffness(angle_L);
-  //     k_right = angleToStiffness(angle_R);
-
   // Softfoot
   gui()->addElement({"Walking", "Main"}, mc_rtc::gui::Label("nrFootsteps", [this]() { return this->nrFootsteps_; }));
   logger().addLogEntry("nrFootsteps", [this]() { return this->nrFootsteps_; });
@@ -251,13 +244,13 @@ Controller::Controller(std::shared_ptr<mc_rbdyn::RobotModule> robotModule,
     mc_rtc::gui::plot::Y("Left",
     [this, angleToStiffness]()
     {
-      double angle = robot().q()[robot().jointIndexByName("L_VARSTIFF")][0];
+      double angle = realRobot().q()[robot().jointIndexByName("L_VARSTIFF")][0];
       return angleToStiffness(angle);
     }, Color::Red),
     mc_rtc::gui::plot::Y("Right",
     [this, angleToStiffness]()
     {
-      double angle = robot().q()[robot().jointIndexByName("R_VARSTIFF")][0];
+      double angle = realRobot().q()[robot().jointIndexByName("R_VARSTIFF")][0];
       return angleToStiffness(angle);
     }, Color::Blue)
   );
