@@ -119,8 +119,8 @@ Controller::Controller(std::shared_ptr<mc_rbdyn::RobotModule> robotModule,
   postureTask = getPostureTask(robot().name());
   postureTask->stiffness(postureStiffness);
   postureTask->weight(postureWeight);
-  // std::vector<std::string> inactiveJoints = {"R_VARSTIFF", "L_VARSTIFF"};
-  // postureTask->selectUnactiveJoints(solver(), inactiveJoints);
+  std::vector<std::string> inactiveJoints = {"R_VARSTIFF", "L_VARSTIFF"};
+  postureTask->selectUnactiveJoints(solver(), inactiveJoints);
 
   // Set half-sitting pose for posture task
   const auto & halfSit = robotModule->stance();
@@ -223,6 +223,13 @@ Controller::Controller(std::shared_ptr<mc_rbdyn::RobotModule> robotModule,
     );
   }
 
+  // std::string ranger_sensor_R = "RightFootRangeSensor";
+  //     std::string ranger_sensor_L = "LeftFootRangeSensor";
+  //     double angle_L = robot().q()[robot().jointIndexByName("L_VARSTIFF")][0];
+  //     double angle_R = robot().q()[robot().jointIndexByName("R_VARSTIFF")][0];
+  //     k_left = angleToStiffness(angle_L);
+  //     k_right = angleToStiffness(angle_R);
+
   // Softfoot
   gui()->addElement({"Walking", "Main"}, mc_rtc::gui::Label("nrFootsteps", [this]() { return this->nrFootsteps_; }));
   logger().addLogEntry("nrFootsteps", [this]() { return this->nrFootsteps_; });
@@ -230,8 +237,34 @@ Controller::Controller(std::shared_ptr<mc_rbdyn::RobotModule> robotModule,
   gui()->addElement({"Walking", "Main"}, mc_rtc::gui::Label("cost", [this]() { return this->cost_; }));
   logger().addLogEntry("cost", [this]() { return cost_; });
 
+   auto angleToStiffness = [this](double angle) 
+  {
+    double angle_low = 0;
+    double angle_high = 1;
+    double stiffness_low = 0;
+    double stiffness_high = 100;
+    return stiffness_low+(angle-angle_low)*(stiffness_high-stiffness_low)/(angle_high-angle_low);
+  };
+
+  gui()->addPlot("Variable Stiffness",
+    mc_rtc::gui::plot::X("ctlTime_", [this]() { return ctlTime_; }),
+    mc_rtc::gui::plot::Y("Left",
+    [this, angleToStiffness]()
+    {
+      double angle = robot().q()[robot().jointIndexByName("L_VARSTIFF")][0];
+      return angleToStiffness(angle);
+    }, Color::Red),
+    mc_rtc::gui::plot::Y("Right",
+    [this, angleToStiffness]()
+    {
+      double angle = robot().q()[robot().jointIndexByName("R_VARSTIFF")][0];
+      return angleToStiffness(angle);
+    }, Color::Blue)
+  );
+
   mc_rtc::log::success("LIPMWalking controller init done.");
 }
+
 
 void Controller::addLogEntries(mc_rtc::Logger & logger)
 {
@@ -620,31 +653,17 @@ bool Controller::run()
 
 
   // Solution to modify the variable stiffness
-  // {
-  //   double R_VarStiff = 0;
-  //   double L_VarStiff = 0;
-    
-  //   auto stiffnessToAngle = [this](double VarStiff) 
-  //     {
-  //       double angle_low = 0;
-  //       double angle_high = 1;
-  //       double stiffness_low = 0;
-  //       double stiffness_high = 100;
-  //       return angle_low+(VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
-  //     };
-
-  //   std::string ranger_sensor_R = "RightFootRangeSensor";
-  //   std::string ranger_sensor_L = "LeftFootRangeSensor";
-  //   const double range_R = robot().device<mc_mujoco::RangeSensor>(ranger_sensor_R).data();
-  //   const double range_L = robot().device<mc_mujoco::RangeSensor>(ranger_sensor_L).data();
-  //   // std::cout << "  range_R:   " << range_R;
-  //   R_VarStiff = range_R*100;
-  //   L_VarStiff = range_L*100;
-  //   RightPhalangesStiffness_ = range_R*100; 
-  //   LeftPhalangesStiffness_ = range_L*100;
-  //   robot().q()[robot().jointIndexByName("L_VARSTIFF")][0] = stiffnessToAngle(L_VarStiff);
-  //   robot().q()[robot().jointIndexByName("R_VARSTIFF")][0] = stiffnessToAngle(R_VarStiff);
-  // }
+  {
+    // const double range_R = robot().device<mc_mujoco::RangeSensor>(ranger_sensor_R).data();
+    // const double range_L = robot().device<mc_mujoco::RangeSensor>(ranger_sensor_L).data();
+    // // std::cout << "  range_R:   " << range_R;
+    // R_VarStiff = range_R*100;
+    // L_VarStiff = range_L*100;
+    // RightPhalangesStiffness_ = range_R*100; 
+    // LeftPhalangesStiffness_ = range_L*100;
+    // robot().q()[robot().jointIndexByName("L_VARSTIFF")][0] = stiffnessToAngle(L_VarStiff);
+    // robot().q()[robot().jointIndexByName("R_VARSTIFF")][0] = stiffnessToAngle(R_VarStiff);
+  }
   
 
 

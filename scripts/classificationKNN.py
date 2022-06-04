@@ -26,8 +26,8 @@ def load_csv(path):
     return data
 
 
-filetrainData = '/home/jrluser/my_workspace/controllers/lipm_walking_controller/scripts/trainData.csv'
-filetestData = '/home/jrluser/my_workspace/controllers/lipm_walking_controller/scripts/testData.csv'
+filetrainData = '/home/jrluser/my_workspace/controllers/lipm_walking_controller/scripts/TrainData.csv'
+filetestData = '/home/jrluser/my_workspace/controllers/lipm_walking_controller/scripts/TestData.csv'
 trainData = load_csv(filetrainData)
 XtrainData = trainData[:,0:6]
 ytrainData = trainData[:,6]
@@ -37,7 +37,6 @@ ytestData = testData[:,6]
 X = np.append(XtrainData, XtestData, axis=0)
 y = np.append(ytrainData, ytestData, axis=0)
 # print(XtrainData.shape)
-# print(ytestData)
 
 # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15)
 
@@ -52,11 +51,13 @@ clf = neighbors.KNeighborsClassifier(n_neighbors, weights="distance", metric="eu
 clf.fit(XtrainData, ytrainData)
 
 Z = clf.predict(XtestData)
+
 # print(Z)
 # print(ytestData)
 
 # Display some metrics
 #  Refer to https://scikit-learn.org/stable/modules/model_evaluation.html#classification-metrics
+
 y_true = ytestData
 y_pred = Z
 print("Accuracy:", accuracy_score(y_true, y_pred))
@@ -88,6 +89,7 @@ bars = ('A', 'B', 'C', 'D', 'E')
 y_pos = np.arange(len(bars))
 plt.bar(y_pos, height)
 plt.show()
+print(height)
 
 # Fit KNN to PCA components
 pipeline_pca = KNeighborsClassifier(11, weights="distance", metric="euclidean", algorithm="kd_tree")

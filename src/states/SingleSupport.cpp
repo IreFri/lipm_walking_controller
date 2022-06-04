@@ -158,9 +158,8 @@ void states::SingleSupport::runState()
 
   std::string swingFootSurfaceName;
 
+    // ***************SoftFoot: calculate ground roughness with range sensors ****************
   {
-    // SoftFoot: calculate ground roughness with range sensors 
-
     std::string SensorName;
     std::string jointName;
     if(ctl.targetContact().surfaceName == "LeftFootCenter") // This is the name "LeftFootCenter" or "RightFootCenter"
@@ -191,7 +190,7 @@ void states::SingleSupport::runState()
     if(remTime_ > 0.25*duration_) // Phase 1
     {
       altitudeGround_.push_back(z_pointGround_);
-      k_ = 10;
+      // k_ = 10;
     }
     else if(!isStiffnessUpdated_) // Phase 2
     {
@@ -221,6 +220,8 @@ void states::SingleSupport::runState()
       
     }  
   }
+
+  // ***************End: calculate ground roughness with range sensors ****************
 
 
 
