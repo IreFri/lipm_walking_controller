@@ -211,7 +211,12 @@ void states::SingleSupport::runState()
             double stiffness_high = 100;
             return angle_low+(VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
           };
-        ctl.robot().q()[ctl.robot().jointIndexByName(jointName)][0] = stiffnessToAngle(k_);
+        auto postureTask = ctl.getPostureTask(ctl.robot().name());
+        postureTask->jointGains(ctl.solver(), {tasks::qp::JointGains("R_VARSTIFF", 350), tasks::qp::JointGains("L_VARSTIFF", 350)});
+        postureTask->target({{jointName, std::vector<double>{stiffnessToAngle(k_)}}});
+        // ctl.robot().q()[ctl.robot().jointIndexByName(jointName)][0] = stiffnessToAngle(k_);
+        // std::vector<std::string> inactiveJoints = {"R_VARSTIFF", "L_VARSTIFF"};
+        // postureTask->selectUnactiveJoints(ctl.solver(), inactiveJoints);
       }
       else
       {

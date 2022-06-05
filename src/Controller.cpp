@@ -119,8 +119,7 @@ Controller::Controller(std::shared_ptr<mc_rbdyn::RobotModule> robotModule,
   postureTask = getPostureTask(robot().name());
   postureTask->stiffness(postureStiffness);
   postureTask->weight(postureWeight);
-  std::vector<std::string> inactiveJoints = {"R_VARSTIFF", "L_VARSTIFF"};
-  postureTask->selectUnactiveJoints(solver(), inactiveJoints);
+
 
   // Set half-sitting pose for posture task
   const auto & halfSit = robotModule->stance();

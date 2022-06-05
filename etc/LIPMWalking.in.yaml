@@ -2452,6 +2452,7 @@ StatesLibraries:
 - "@MC_CONTROLLER_INSTALL_PREFIX@/lipm_walking_controller/states"
 Managed: false
 StepByStep: false
+IdleKeepState: false
 init: Initial
 states:
   WalkInternal:
