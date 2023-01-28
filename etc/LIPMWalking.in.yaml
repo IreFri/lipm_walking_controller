@@ -763,11 +763,14 @@ plans:
         - pose:
             translation: [0.035, 0.07, 0.0]
           surface: LeftFootCenter
-    external:
+    external: # refer to hrp4cr section for a detailed explanation
       double_support_duration: 0.5
       single_support_duration: 0.7
+      allowed_planning_time:
+        standing: 2.0
+        single_support: 0.2
       swing_height: 0.04
-      com_height: 0.778 # 0.75 or 0.8483
+      com_height: 0.778
       contacts:
         - pose:
             translation: [0.035, -0.07, 0.0]
@@ -775,6 +778,8 @@ plans:
         - pose:
             translation: [0.035, 0.07, 0.0]
           surface: LeftFootCenter
+      leftFootLandingOffset: [0.0, 0.09, 0.0] # x, y, theta
+      rightFootLandingOffset: [0.0, -0.09, 0.0] # x, y, theta
     new_plan:
       double_support_duration: 0.3
       single_support_duration: 0.8
@@ -2668,7 +2673,7 @@ init: LIPMWalking::Initial
 transitions:
   - [LIPMWalking::Initial, Standing, LIPMWalking::WalkFSM]
 
-Plugins: [footsteps_planner_plugin, ExternalFootstepPlannerPlugin]
+# Plugins: [footsteps_planner_plugin, ExternalFootstepPlannerPlugin]
 
 # Set realRobot's joint configuration from encoder readings
 # ObserverPipeline:
@@ -2715,6 +2720,8 @@ ObserverPipelines:
     gui: true
     observers:
       - type: Encoder
+      - type: Attitude
+        required: false
         # Floating base kinematic-inertial state observation
       - type: KinematicInertial
         # Floating base Groundtruth
@@ -2722,16 +2729,16 @@ ObserverPipelines:
         update: false
         config:
           bodySensor: FloatingBase
-      - type: SLAM
-        update: true
-        config:
-          Robot:
-            hrp4j_soft:
-              camera: base_link
-            hrp4j:
-              camera: base_link
-          SLAM:
-            map: map
-            estimated: WAIST_camera_link
-          Filter:
-            use: false
+      # - type: SLAM
+      #   update: true
+      #   config:
+      #     Robot:
+      #       hrp4j_soft:
+      #         camera: base_link
+      #       hrp4j:
+      #         camera: base_link
+      #     SLAM:
+      #       map: map
+      #       estimated: WAIST_camera_link
+      #     Filter:
+      #       use: false
