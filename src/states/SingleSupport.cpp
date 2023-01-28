@@ -197,51 +197,55 @@ void states::SingleSupport::runState()
 
     // In the following line const auto & is equal to const std::vector<double> &. auto automatically replace the type when it can be deduce automatically.
     // The compilator knows that robot().device<mc_openrtm::RangeSensor>("NameOfSensor").data() will return a const std::vector<double> &
-    const auto & range_01 = ctl.robot().device<mc_openrtm::RangeSensor>(ranger_sensor_01).data(); // He takes the correspond right and left depending of the ContactSurface
-    const auto & range_10 = ctl.robot().device<mc_openrtm::RangeSensor>(ranger_sensor_10).data();
-
-    // check if you have data from your sensor
-    if(range_01.size() > 1 && range_10.size() > 1)
+    if(ctl.robot().hasDevice<mc_openrtm::RangeSensor>(ranger_sensor_10) && ctl.robot().hasDevice<mc_openrtm::RangeSensor>(ranger_sensor_01))
     {
-      // Get the data from the sensor
-      range_01_ = range_01[0];
-      range_10_ = range_10[0];
 
-      mc_rtc::log::info("Data for range sensor 01 of {}: {}", ctl.targetContact().surfaceName, range_01_);
-      mc_rtc::log::info("Data for range sensor 10 of {}: {}", ctl.targetContact().surfaceName, range_10_);
+      const auto & range_01 = ctl.robot().device<mc_openrtm::RangeSensor>(ranger_sensor_01).data(); // He takes the correspond right and left depending of the ContactSurface
+      const auto & range_10 = ctl.robot().device<mc_openrtm::RangeSensor>(ranger_sensor_10).data();
 
-      double diff_between_01_10 = range_01_ - range_10_;
-
-      if(std::isnan(diff_between_01_10) || std::isinf(diff_between_01_10))
+      // check if you have data from your sensor
+      if(range_01.size() > 1 && range_10.size() > 1)
       {
-        // Only to log 0 to show that you miss data
-        Ra_ = 0.0;
-        Rb_ = 0.0; 
-        mc_rtc::log::error("There is a nan element or infinite element");
+        // Get the data from the sensor
+        range_01_ = range_01[0];
+        range_10_ = range_10[0];
+
+        mc_rtc::log::info("Data for range sensor 01 of {}: {}", ctl.targetContact().surfaceName, range_01_);
+        mc_rtc::log::info("Data for range sensor 10 of {}: {}", ctl.targetContact().surfaceName, range_10_);
+
+        double diff_between_01_10 = range_01_ - range_10_;
+
+        if(std::isnan(diff_between_01_10) || std::isinf(diff_between_01_10))
+        {
+          // Only to log 0 to show that you miss data
+          Ra_ = 0.0;
+          Rb_ = 0.0; 
+          mc_rtc::log::error("There is a nan element or infinite element");
+        }
+        else
+        {
+          // Computation for the current foot in the air, not for both 
+          const double diff_square = pow(diff_between_01_10, 2);
+          ranger_square_.push_back(diff_square);
+          // For accumulate I have to put 0.0 and not 0. 0 means it will cast everyting in int and then do the sum, so 0.000215 will be convert to 0 and then sum, that's why it did not work: sorry
+          const double sum = std::accumulate(ranger_square_.begin(), ranger_square_.end(), 0.0);
+          const double mean = std::abs(sum) / (ranger_square_.size() + 1.0);
+          Ra_ = std::sqrt(mean);
+          Rb_ = diff_between_01_10; 
+    
+          // For both feet I have a lot of negative values
+          mc_rtc::log::success("Foot in motion {}", ctl.targetContact().surfaceName);
+          mc_rtc::log::success("ranger_square_.size() : {}", ranger_square_.size());
+          mc_rtc::log::success("sum : {:.0e}", sum);
+          mc_rtc::log::success("mean : {}", mean);
+          mc_rtc::log::success("Ra_ : {}", Ra_);
+          mc_rtc::log::success("Rb_ : {}", Rb_);
+        }
       }
       else
       {
-        // Computation for the current foot in the air, not for both 
-        const double diff_square = pow(diff_between_01_10, 2);
-        ranger_square_.push_back(diff_square);
-        // For accumulate I have to put 0.0 and not 0. 0 means it will cast everyting in int and then do the sum, so 0.000215 will be convert to 0 and then sum, that's why it did not work: sorry
-        const double sum = std::accumulate(ranger_square_.begin(), ranger_square_.end(), 0.0);
-        const double mean = std::abs(sum) / (ranger_square_.size() + 1.0);
-        Ra_ = std::sqrt(mean);
-        Rb_ = diff_between_01_10; 
-  
-        // For both feet I have a lot of negative values
-        mc_rtc::log::success("Foot in motion {}", ctl.targetContact().surfaceName);
-        mc_rtc::log::success("ranger_square_.size() : {}", ranger_square_.size());
-        mc_rtc::log::success("sum : {:.0e}", sum);
-        mc_rtc::log::success("mean : {}", mean);
-        mc_rtc::log::success("Ra_ : {}", Ra_);
-        mc_rtc::log::success("Rb_ : {}", Rb_);
+        mc_rtc::log::error("Range sensor does not have value");
       }
-    }
-    else
-    {
-      mc_rtc::log::error("Range sensor does not have value");
     }
 
   }
