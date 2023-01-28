@@ -29,6 +29,9 @@
 
 #include <mc_openrtm/devices/RangeSensor.h>
 
+namespace lipm_walking
+{
+
 void states::SingleSupport::handleExternalPlan()
 {
   using Foot = mc_plugin::ExternalFootstepPlanner::Foot;
