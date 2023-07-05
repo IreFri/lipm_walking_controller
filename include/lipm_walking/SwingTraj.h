@@ -89,6 +89,16 @@ public:
   /** \brief Const accessor to the configuration. */
   virtual const Configuration & config() const = 0;
 
+  /** \brief Update the internal state of the swing trajectory.
+      \param pitch pitch angle
+  */
+  virtual void updatePitch(double pitch) = 0;
+
+   /** \brief Update the internal state of the swing trajectory.
+      \param x_offset x offset
+  */
+  virtual void updatePosXZ(double x_offset, double z_offset) = 0;
+
 protected:
   /** \brief Accessor to the configuration. */
   virtual Configuration & config() = 0;

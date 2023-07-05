@@ -63,6 +63,28 @@ SwingTrajCubicSplineSimple::SwingTrajCubicSplineSimple(const sva::PTransformd & 
 {
   config_.load(mcRtcConfig);
 
+  compute();
+}
+
+void SwingTrajCubicSplineSimple::updatePitch(double pitch)
+{
+  Eigen::Matrix3d rotOffset = mc_rbdyn::rpyToMat(Eigen::Vector3d(0., pitch, 0.));
+  endPose_ = sva::PTransformd(rotOffset) * endPose_;
+  compute();
+}
+
+void SwingTrajCubicSplineSimple::updatePosXZ(double x_offset, double z_offset)
+{
+  const sva::PTransformd newEndPose = sva::PTransformd(Eigen::Vector3d(x_offset, 0., z_offset)) * endPose_;
+  endPose_ = newEndPose;
+  compute();
+}
+
+void SwingTrajCubicSplineSimple::compute()
+{
+  posFunc_->clearFuncs();
+  rotFunc_->clearPoints();
+
   double withdrawDuration = config_.withdrawDurationRatio * (endTime_ - startTime_);
   double approachDuration = config_.approachDurationRatio * (endTime_ - startTime_);
 
@@ -116,6 +138,7 @@ SwingTrajCubicSplineSimple::SwingTrajCubicSplineSimple(const sva::PTransformd & 
   // Rot
   rotFunc_->calcCoeff();
 }
+
 
 sva::PTransformd SwingTrajCubicSplineSimple::pose(double t) const
 {

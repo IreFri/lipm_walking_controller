@@ -1262,19 +1262,19 @@ void SoftFootState::updateFootSwingPose(mc_control::fsm::Controller & ctl, const
 
   // Follow Murooka-san code to update, sorry for the dirty access
   // The order is important
-  if(ctrl.swingTrajType == "LandingSearch")
+  if(ctrl.swingTrajType != "DefaultSwingFoot")
   {
     if(with_foot_adjustment_)
     {
       mc_rtc::log::info("[SoftFootState] Update the x and z");
-      dynamic_cast<BWC::SwingTrajLandingSearch*>(ctrl.swingTraj.get())->updatePosXZ(desired_offset_position_x, desired_offset_position_z);
+      ctrl.swingTraj->updatePosXZ(desired_offset_position_x, desired_offset_position_z);
     }
     if(!with_foot_adjustment_ && with_ankle_rotation_)
     {
       mc_rtc::log::info("[SoftFootState] Only update the z");
-      dynamic_cast<BWC::SwingTrajLandingSearch*>(ctrl.swingTraj.get())->updatePosXZ(0, desired_offset_position_z);
+      ctrl.swingTraj->updatePosXZ(0, desired_offset_position_z);
       mc_rtc::log::info("[SoftFootState] Update the rotation");
-      dynamic_cast<BWC::SwingTrajLandingSearch*>(ctrl.swingTraj.get())->updatePitch(desired_angle);
+      ctrl.swingTraj->updatePitch(desired_angle);
     }
   }
   else

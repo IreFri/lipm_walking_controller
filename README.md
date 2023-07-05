@@ -252,7 +252,8 @@ In any case, `with_variable_stiffness`, `with_ankle_rotation` and `with_foot_adj
 
 ### How to use?
 1. In the GUI, after clicking on `Walking/Main/Start Standing`, you have now access to `Walking/Swing` where you can select the desired swing trajectory type and configure it.
-2. If you want to use the foot target pose update computed by `SoftFootState`, you need to use `LandingSearch`
+2. If you want to use the foot target pose update computed by `SoftFootState`, you need to use `LandingSearch` or `CubicSplineSimple`.
+As a note: `CubicSplineSimple` seems slightly better, it's recommended to use it.
 
 
 ### How to debug a `rtcd = 0`?

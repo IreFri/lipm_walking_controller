@@ -110,6 +110,18 @@ public:
     return config_;
   }
 
+  /** \brief Update the internal state of the swing trajectory.
+      \param pitch pitch angle
+  */
+  virtual void updatePitch(double pitch) override;
+
+  /** \brief Update the internal state of the swing trajectory.
+      \param x_offset x offset
+  */
+  virtual void updatePosXZ(double x_offset, double z_offset) override;
+
+  void compute();
+
 protected:
   /** \brief Accessor to the configuration. */
   inline virtual Configuration & config() override

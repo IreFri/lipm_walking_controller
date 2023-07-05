@@ -144,7 +144,7 @@ Controller::Controller(mc_rbdyn::RobotModulePtr robotModule,
     if(robotConfig("SwingTraj").has("type"))
     {
       swingTrajType = static_cast<std::string>(robotConfig("SwingTraj")("type"));
-      for(const auto& key: config_("SwingTraj")(swingTrajType).keys())
+      for(const auto& key: robotConfig("SwingTraj").keys())
       {
         config_("SwingTraj")(swingTrajType).add(key, robotConfig("SwingTraj")(key));
       }

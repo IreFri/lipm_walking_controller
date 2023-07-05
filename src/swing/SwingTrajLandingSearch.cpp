@@ -104,10 +104,7 @@ void SwingTrajLandingSearch::update(double t)
 
 void SwingTrajLandingSearch::updatePitch(double pitch)
 {
-  // Compute current targeted foot angle
-  double current_pitch = mc_rbdyn::rpyFromMat(endPose_.rotation())[1];
-  // \todo Determine landing pose based on measurements
-  Eigen::Matrix3d rotOffset = mc_rbdyn::rpyToMat(Eigen::Vector3d(0., pitch - current_pitch, 0.));
+  Eigen::Matrix3d rotOffset = mc_rbdyn::rpyToMat(Eigen::Vector3d(0., pitch, 0.));
   const sva::PTransformd fakeEndPose = sva::PTransformd(rotOffset) * sva::PTransformd(endPose_.rotation(), Eigen::Vector3d(endPose_.translation().x(), endPose_.translation().y(), 0.));
 
 

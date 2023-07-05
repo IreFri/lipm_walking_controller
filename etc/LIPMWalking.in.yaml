@@ -124,12 +124,7 @@ robot_models:
     torso:
       pitch: 0.0
     SwingTraj:
-      type: LandingSearch
-      withdrawDurationRatio: 0.2
-      withdrawOffset: [0, 0, 0.04] # [m]
-      preApproachDurationRatio: 0.25
-      approachDurationRatio: 0.2
-      approachOffset: [0, 0, 0.04] # [m]
+      type: CubicSplineSimple
   hrp5_p:
     sole:
       half_length: 0.11895
@@ -587,7 +582,7 @@ plans:
   hrp4cr:
     ashibumi: # stepping in place
       double_support_duration: 0.5
-      single_support_duration: 0.8
+      single_support_duration: 1.2
       com_height: 0.817301
       swing_height: 0.04
       contacts:
@@ -629,7 +624,7 @@ plans:
           surface: LeftFootCenter
     custom_backward:
       double_support_duration: 0.5
-      single_support_duration: 0.8
+      single_support_duration: 1.2
       step_length: 0.1
       swing_height: 0.05
       com_height: 0.817301
@@ -642,7 +637,7 @@ plans:
           surface: LeftFootCenter
     custom_forward:
       double_support_duration: 0.4
-      single_support_duration: 0.7
+      single_support_duration: 1.2
       step_length: 0.15
       swing_height: 0.04
       com_height: 0.817301
@@ -655,7 +650,7 @@ plans:
           surface: LeftFootCenter
     custom_lateral:
       double_support_duration: 0.4
-      single_support_duration: 0.7
+      single_support_duration: 1.2
       step_length: 0.1
       swing_height: 0.04
       com_height: 0.817301
@@ -673,7 +668,7 @@ plans:
           zmp: 1000.0
     warmup:
       double_support_duration: 0.5
-      single_support_duration: 0.7
+      single_support_duration: 1.2
       swing_height: 0.04
       com_height: 0.817301
       contacts:
