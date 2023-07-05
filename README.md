@@ -199,16 +199,17 @@ You need to do the following
 cd ~/path/to/ws_bwc/src/isri-aist/TrajectoryCollection
 mkdir build
 cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=~/mc_rtc_install
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=~/path/to/mc_rtc_install
 make -j6 && make install
 ```
 
 ### Installing `LIPMWalkingSoftFoot`
 ```
+source ~/path/to/ws_bwc/devel/setup.[bash or zsh] # This is needed in order to have access to `variable_stiffness` ros package
 cd ~/path/to/lipm_walking_controller_softfoot
 mkdir build
 cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=~/mc_rtc_install
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=~/path/to/mc_rtc_install
 make -j6 && make install
 ```
 
