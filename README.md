@@ -235,12 +235,22 @@ SwingTraj:
 2. Inside a robot definition within `robot_models`, you can define the default swing trajectory you want to use. The parameters here will override the one in `SwingTraj` defined above.
 ```
 SwingTraj:
-    type: LandingSearch
-    withdrawDurationRatio: 0.2
-    withdrawOffset: [0, 0, 0.04] # [m]
-    preApproachDurationRatio: 0.25
-    approachDurationRatio: 0.2
-    approachOffset: [0, 0, 0.04] # [m]
+  type: LandingSearch
+  withdrawDurationRatio: 0.2
+  withdrawOffset: [0, 0, 0.04] # [m]
+  preApproachDurationRatio: 0.25
+  approachDurationRatio: 0.2
+  approachOffset: [0, 0, 0.04] # [m]
+```
+or
+```
+SwingTraj:
+  type: CubicSplineSimple
+  withdrawDurationRatio: 0.25
+  withdrawOffset: [0, 0, 0.015] # [m]
+  approachDurationRatio: 0.25
+  approachOffset: [0, 0, 0.015] # [m]
+  swingOffset: [0, 0, 0.05] # [m]
 ```
 3. To configure `SoftFootState` you can edit `src/states/etc/states.yaml`:
 ```
