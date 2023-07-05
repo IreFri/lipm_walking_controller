@@ -43,6 +43,9 @@
 #include <lipm_walking/Sole.h>
 #include <lipm_walking/WalkingState.h>
 
+#include <lipm_walking/swing/SwingTrajCubicSplineSimple.h>
+#include <lipm_walking/swing/SwingTrajLandingSearch.h>
+
 /** Main controller namespace.
  *
  */
@@ -323,7 +326,12 @@ public: /* visible to FSM states */
   bool isWalking = false;
   unsigned nbMPCFailures_ = 0; /**< Number of times the walking pattern generator failed */
 
-private: /* hidden from FSM states */
+  // ! Foot swing trajectory
+  std::shared_ptr<BWC::SwingTraj> swingTraj = nullptr;
+  std::string swingTrajType = "DefaultSwingFoot";
+  size_t nrFootsteps_ = 0;
+
+public: /* hidden from FSM states */
   std::shared_ptr<mc_tasks::lipm_stabilizer::StabilizerTask> stabilizer_;
   mc_rbdyn::lipm_stabilizer::StabilizerConfiguration
       defaultStabilizerConfig_; /**< Default configuration of the stabilizer */

@@ -321,6 +321,7 @@ void states::Standing::startWalking()
     return;
   }
   ctl.startWalking = true;
+  ctl.nrFootsteps_ = 0;
   if(ctl.pauseWalking)
   {
     gui()->removeElement({"Walking", "Main"}, "Resume walking");

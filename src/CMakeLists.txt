@@ -28,7 +28,10 @@ set(CONTROLLER_SRC
     PlanInterpolator.cpp
     ExternalPlanner.cpp
     Preview.cpp
-    SwingFoot.cpp)
+    SwingFoot.cpp
+    RobotUtils.cpp
+    swing/SwingTrajCubicSplineSimple.cpp
+    swing/SwingTrajLandingSearch.cpp)
 
 set(CONTROLLER_HDR
     ${CMAKE_SOURCE_DIR}/include/lipm_walking/Contact.h
@@ -42,7 +45,12 @@ set(CONTROLLER_HDR
     ${CMAKE_SOURCE_DIR}/include/lipm_walking/State.h
     ${CMAKE_SOURCE_DIR}/include/lipm_walking/SwingFoot.h
     ${CMAKE_SOURCE_DIR}/include/lipm_walking/utils/polynomials.h
-    ${CMAKE_SOURCE_DIR}/include/lipm_walking/utils/slerp.h)
+    ${CMAKE_SOURCE_DIR}/include/lipm_walking/utils/slerp.h
+    ${CMAKE_SOURCE_DIR}/include/lipm_walking/swing/SwingTrajCubicSplineSimple.h
+    ${CMAKE_SOURCE_DIR}/include/lipm_walking/swing/SwingTrajLandingSearch.h)
+
+include_directories(include ${catkin_INCLUDE_DIRS})
+link_directories(${catkin_LIBRARY_DIRS})
 
 add_library(${PROJECT_NAME} SHARED ${CONTROLLER_SRC} ${CONTROLLER_HDR})
 target_include_directories(
@@ -52,6 +60,7 @@ target_link_libraries(
   ${PROJECT_NAME}
   PUBLIC copra::copra eigen-quadprog::eigen-quadprog mc_rtc::mc_control_fsm
          mc_rtc::mc_planning ExternalFootstepPlanner_data)
+
 install(TARGETS ${PROJECT_NAME} DESTINATION "${MC_RTC_LIBDIR}")
 
 add_controller(${PROJECT_NAME}_controller lib.cpp "")
@@ -68,7 +77,7 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/etc/LIPMWalking.yaml"
 add_subdirectory(states)
 
 install(
-  TARGETS ${PROJECT_NAME}
+  TARGETS ${PROJECT_NAME} qhull_r qhullcpp
   EXPORT "${TARGETS_EXPORT_NAME}"
   RUNTIME DESTINATION bin
   LIBRARY DESTINATION lib

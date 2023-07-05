@@ -9,3 +9,14 @@ LIPMWalking::WalkInternal:
 LIPMWalking::WalkFSM:
   base: Parallel
   states: [LIPMWalking::RunStabilizer, LIPMWalking::WalkInternal]
+
+LIPMWalking::SoftFoot::Configured:
+  base: LIPMWalking::SoftFoot
+  with_variable_stiffness: false
+  with_ankle_rotation: true
+  with_foot_adjustment: false
+  nr_phalanxes: 1
+
+LIPMWalking::WalkFSMWithSoftFootState:
+  base: Parallel
+  states: [LIPMWalking::SoftFoot::Configured, LIPMWalking::WalkFSM]

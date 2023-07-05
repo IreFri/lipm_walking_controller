@@ -414,6 +414,11 @@ struct FootstepPlan
     return targetContact_;
   }
 
+  /** Update target contact.
+   *
+   */
+  void updateTargetContact(const sva::PTransformd & targetContactPose);
+
   /** Reference torso pitch angle.
    *
    */

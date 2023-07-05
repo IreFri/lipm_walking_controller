@@ -96,16 +96,35 @@ void states::SingleSupport::start()
   swingFootTask->reset();
   ctl.solver().addTask(swingFootTask);
 
-  swingFoot_.landingDuration(ctl.plan.landingDuration());
-  swingFoot_.landingPitch(ctl.plan.landingPitch());
-  swingFoot_.takeoffDuration(ctl.plan.takeoffDuration());
-  swingFoot_.takeoffOffset(ctl.plan.takeoffOffset());
-  swingFoot_.takeoffPitch(ctl.plan.takeoffPitch());
-  swingFoot_.reset(swingFootTask->surfacePose(), targetContact.pose, duration_, ctl.plan.swingHeight());
+  if(ctl.swingTrajType == "DefaultSwingFoot")
+  {
+    swingFoot_.landingDuration(ctl.plan.landingDuration());
+    swingFoot_.landingPitch(ctl.plan.landingPitch());
+    swingFoot_.takeoffDuration(ctl.plan.takeoffDuration());
+    swingFoot_.takeoffOffset(ctl.plan.takeoffOffset());
+    swingFoot_.takeoffPitch(ctl.plan.takeoffPitch());
+    swingFoot_.reset(swingFootTask->surfacePose(), targetContact.pose, duration_, ctl.plan.swingHeight());
+    swingFoot_.addLogEntries(logger());
+  }
+  else if(ctl.swingTrajType == "CubicSplineSimple")
+  {
+    ctl.swingTraj = std::make_shared<BWC::SwingTrajCubicSplineSimple>(
+        swingFootTask->surfacePose(), targetContact.pose, 0., duration_,
+        BWC::TaskGain{}, ctl.config()("SwingTraj")(ctl.swingTrajType));
+  }
+  else if(ctl.swingTrajType == "LandingSearch")
+  {
+    ctl.swingTraj = std::make_shared<BWC::SwingTrajLandingSearch>(
+        swingFootTask->surfacePose(), targetContact.pose, 0., duration_,
+        BWC::TaskGain{}, ctl.config()("SwingTraj")(ctl.swingTrajType));
+  }
+  else
+  {
+    mc_rtc::log::error_and_throw("[SingleSupport] Invalid swingTrajType: {}.", ctl.swingTrajType);
+  }
 
   logger().addLogEntry("rem_phase_time", [this]() { return remTime_; });
   logger().addLogEntry("walking_phase", []() { return 1.; });
-  swingFoot_.addLogEntries(logger());
 
   runState(); // don't wait till next cycle to update reference and tasks
 }
@@ -117,7 +136,10 @@ void states::SingleSupport::teardown()
   logger().removeLogEntry("contact_impulse");
   logger().removeLogEntry("rem_phase_time");
   logger().removeLogEntry("walking_phase");
-  swingFoot_.removeLogEntries(logger());
+  if(controller().swingTrajType == "DefaultSwingFoot")
+  {
+    swingFoot_.removeLogEntries(logger());
+  }
 }
 
 bool states::SingleSupport::checkTransitions()
@@ -125,6 +147,7 @@ bool states::SingleSupport::checkTransitions()
   if(remTime_ < 0.)
   {
     output("DoubleSupport");
+    controller().nrFootsteps_ ++;
     return true;
   }
   return false;
@@ -170,19 +193,33 @@ void states::SingleSupport::updateSwingFoot()
   auto & targetContact = ctl.targetContact();
   auto & supportContact = ctl.supportContact();
   double dt = ctl.timeStep;
-
   if(!stabilizer()->inDoubleSupport())
   {
     bool liftPhase = (remTime_ > duration_ / 3.);
     bool touchdownDetected = detectTouchdown(swingFootTask, targetContact.pose);
     if(liftPhase || !touchdownDetected)
     {
-      swingFoot_.integrate(dt);
-      swingFootTask->target(swingFoot_.pose());
-      // T_0_s transforms a MotionVecd variable from world to surface frame
-      sva::PTransformd T_0_s(swingFootTask->surfacePose().rotation());
-      swingFootTask->refVelB(T_0_s * swingFoot_.vel());
-      swingFootTask->refAccel(T_0_s * swingFoot_.accel());
+      if(ctl.swingTrajType == "DefaultSwingFoot")
+      {
+        swingFoot_.integrate(dt);
+        swingFootTask->target(swingFoot_.pose());
+        // T_0_s transforms a MotionVecd variable from world to surface frame
+        sva::PTransformd T_0_s(swingFootTask->surfacePose().rotation());
+        swingFootTask->refVelB(T_0_s * swingFoot_.vel());
+        swingFootTask->refAccel(T_0_s * swingFoot_.accel());
+      }
+      else // using BWC::SwingTraj
+      {
+        if(stateTime_ < duration_)
+        {
+          ctl.swingTraj->update(stateTime_);
+
+          swingFootTask->target(ctl.swingTraj->pose(stateTime_));
+          sva::PTransformd T_0_s(swingFootTask->surfacePose().rotation());
+          swingFootTask->refVelB(T_0_s * ctl.swingTraj->vel(stateTime_));
+          swingFootTask->refAccel(T_0_s * ctl.swingTraj->accel(stateTime_));
+        }
+      }
     }
     else
     {

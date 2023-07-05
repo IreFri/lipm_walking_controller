@@ -32,4 +32,10 @@ add_fsm_state_simple(SingleSupport)
 
 add_fsm_state_simple(RunStabilizer)
 
+add_fsm_state_simple(SoftFootState)
+target_include_directories(
+  SoftFootState SYSTEM PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../3rd-party/qhull/src"
+)
+target_link_libraries(SoftFootState PUBLIC ${catkin_LIBRARIES} mc_rtc::mc_rtc_ros mc_mujoco::devices qhullcpp qhull_r)
+
 add_fsm_data_directory(data)

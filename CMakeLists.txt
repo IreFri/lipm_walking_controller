@@ -66,6 +66,15 @@ if(EXISTS "${MC_RTC_LIBDIR}/mc_controller/etc/LIPMWalking.conf")
 ")
 endif()
 
+set(CATKIN_ENABLE_TESTING OFF)
+option(BUILD_SHARED_LIBS "Build libraries as shared as opposed to static" ON)
+add_project_dependency(trajectory_collection REQUIRED)
+
+find_package(catkin REQUIRED COMPONENTS roscpp variable_stiffness)
+find_package(mc_mujoco REQUIRED)
+
+add_subdirectory(3rd-party/qhull EXCLUDE_FROM_ALL)
+
 add_subdirectory(plugins/ExternalFootstepPlanner)
 add_subdirectory(src)
 

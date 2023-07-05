@@ -173,3 +173,148 @@ _The stabilizer task becomes enable, and HRP4CR starts balancing._
 
 
 ##### Left Joystick leads the robot walking foward/backward/left/right, and Right Joystick makes him turn.
+
+___
+
+___
+
+
+## SoftFootState
+
+### How to clone ?
+```
+git clone -b topic/SoftFootState git@github.com:IreFri/lipm_walking_controller.git --recursive
+```
+It'll clone directly into the `topic/SoftFootState` branch.
+
+### Dependencies
+* mc_mujoco
+* TrajectoryCollection
+
+### Installing `TrajectoryCollection`
+You need to do the following
+```
+cd ~/path/to/ws_bwc/src/isri-aist/TrajectoryCollection
+mkdir build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=~/mc_rtc_install
+make -j6 && make install
+```
+
+### Installing `LIPMWalking`
+```
+cd ~/path/to/lipm_walking_controller
+mkdir build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=~/mc_rtc_install
+make -j6 && make install
+```
+
+### How to configure `SoftFootState`?
+Everytime you modify a .yaml, you need to re-install the controller i.e to run `make install`.
+In `LIPMWalking.in.yaml` you have:
+1. The default config for swing trajectory from `BaselineWalkingController`:
+```
+SwingTraj:
+  CubicSplineSimple:
+    withdrawDurationRatio: 0.25
+    withdrawOffset: [0, 0, 0.015] # [m]
+    approachDurationRatio: 0.25
+    approachOffset: [0, 0, 0.015] # [m]
+    swingOffset: [0, 0, 0.05] # [m]
+  LandingSearch:
+    withdrawDurationRatio: 0.2
+    withdrawOffset: [0, 0, 0.04] # [m]
+    preApproachDurationRatio: 0.25
+    approachDurationRatio: 0.2
+    approachOffset: [0, 0, 0.04] # [m]
+```
+2. Inside a robot definition within `robot_models`, you can define the default swing trajectory you want to use. The parameters here will override the one in `SwingTraj` defined above.
+```
+SwingTraj:
+    type: LandingSearch
+    withdrawDurationRatio: 0.2
+    withdrawOffset: [0, 0, 0.04] # [m]
+    preApproachDurationRatio: 0.25
+    approachDurationRatio: 0.2
+    approachOffset: [0, 0, 0.04] # [m]
+```
+3. To configure `SoftFootState` you can edit `src/states/etc/states.yaml`:
+```
+LIPMWalking::SoftFoot::Configured:
+  base: LIPMWalking::SoftFoot
+  with_variable_stiffness: false
+  with_ankle_rotation: true
+  with_foot_adjustment: false
+  nr_phalanxes: 1
+```
+In any case, `with_variable_stiffness`, `with_ankle_rotation` and `with_foot_adjustment` can be configured by the GUI too.
+
+### How to use?
+1. In the GUI, after clicking on `Walking/Main/Start Standing`, you have now access to `Walking/Swing` where you can select the desired swing trajectory type and configure it.
+2. If you want to use the foot target pose update computed by `SoftFootState`, you need to use `LandingSearch`
+
+
+### How to debug a `rtcd = 0`?
+Before to try on the robot, the simple test is to do the following
+```
+cd ~/path/to/catkin_ws/devel/lib/mc_rtc_ticker
+gdb --args mc_rtc_ticker
+r (then press enter)
+```
+If it crashes, you can do the following:
+```
+bt
+```
+Then it'll show something like this
+```
+#0  __GI_raise (sig=sig@entry=6) at ../sysdeps/unix/sysv/linux/raise.c:50
+#1  0x00007ffff6c61859 in __GI_abort () at abort.c:79
+#2  0x00007ffff7039911 in  () at /lib/x86_64-linux-gnu/libstdc++.so.6
+#3  0x00007ffff704538c in  () at /lib/x86_64-linux-gnu/libstdc++.so.6
+#4  0x00007ffff70453f7 in  () at /lib/x86_64-linux-gnu/libstdc++.so.6
+#5  0x00007ffff70456a9 in  () at /lib/x86_64-linux-gnu/libstdc++.so.6
+#6  0x00007fffdc03aed2 in void mc_rtc::log::error_and_throw<std::runtime_error, char const (&) [24], std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(char const (&) [24], std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) () at /path/to/install/lib/mc_controller/fsm/states/Parallel.so
+#7  0x00007fffdc020bf8 in mc_control::fsm::ParallelState::start(mc_control::fsm::Controller&) () at /path/to/install/lib/mc_controller/fsm/states/Parallel.so
+#8  0x00007ffff405c10c in mc_control::fsm::State::start_(mc_control::fsm::Controller&) () at /path/to/install/lib/libmc_control_fsm.so.2
+#9  0x00007ffff4067655 in mc_control::fsm::StateFactory::create(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, mc_control::fsm::Controller&, bool, mc_rtc::Configuration const&) () at /path/to/install/lib/libmc_control_fsm.so.2
+#10 0x00007ffff406782e in mc_control::fsm::StateFactory::create(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, mc_control::fsm::Controller&) ()
+    at /path/to/install/lib/libmc_control_fsm.so.2
+#11 0x00007ffff4054a60 in mc_control::fsm::Executor::next(mc_control::fsm::Controller&) () at /path/to/install/lib/libmc_control_fsm.so.2
+#12 0x00007ffff4055d64 in mc_control::fsm::Executor::run(mc_control::fsm::Controller&, bool) () at /path/to/install/lib/libmc_control_fsm.so.2
+#13 0x00007ffff40319c4 in mc_control::fsm::Controller::run(mc_solver::FeedbackType) () at /path/to/install/lib/libmc_control_fsm.so.2
+#14 0x00007ffff7e46d61 in mc_control::MCGlobalController::run() () at /path/to/install/lib/libmc_control.so.2
+#15 0x0000555555615b0e in mc_mujoco::MjSimImpl::controlStep() ()
+#16 0x00005555556215af in mc_mujoco::MjSimImpl::stepSimulation() ()
+#17 0x00005555555eeae8 in simulate(mc_mujoco::MjSim&) ()
+#18 0x00007ffff7071de4 in  () at /lib/x86_64-linux-gnu/libstdc++.so.6
+#19 0x00007ffff73c6609 in start_thread (arg=<optimized out>) at pthread_create.c:477
+#20 0x00007ffff6d5e133 in clone () at ../sysdeps/unix/sysv/linux/x86_64/clone.S:95
+
+```
+Then from the `#0` (it's called a frame), read and go down until you find something related to `mc_rtc`. In this example, it would be:
+```
+#6  0x00007fffdc03aed2 in void mc_rtc::log::error_and_throw<std::runtime_error, char const (&) [24], std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(char const (&) [24], std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) () at /path/to/install/lib/mc_controller/fsm/states/Parallel.so
+```
+and the beginning is the name of the method/function where it crashed, here it is
+```void mc_rtc::log::error_and_throw```.
+From here, you can go to check the method/function and try to understand what happened !
+
+As a note (this is a bad example, but the only error stack I have), `mc_rtc::log::error_and_throw` will `throw` (crash) the controller and it is intended.
+
+### How to debug a state that can not be loaded?
+```
+[error] Some states could not be loaded as their base is not available, check for typos or cycles
+[warning] - LIPMWalking::SoftFoot::Configured (base: LIPMWalking::SoftFoot)
+```
+The easiest way is to do:
+```
+locate NameOfState.so
+ldd -d /path/to/NameOfState.so
+```
+then if you see something like:
+```
+undefined symbol:
+```
+then something is wrong in the `targeted_link_libraries` in the `CMakeLists.txt` in `src/states/`.
+Otherwise, call for help !

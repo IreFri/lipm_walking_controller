@@ -1,4 +1,18 @@
 initial_plan: custom_forward
+# From BaselineWalkingController
+SwingTraj:
+  CubicSplineSimple:
+    withdrawDurationRatio: 0.25
+    withdrawOffset: [0, 0, 0.015] # [m]
+    approachDurationRatio: 0.25
+    approachOffset: [0, 0, 0.015] # [m]
+    swingOffset: [0, 0, 0.05] # [m]
+  LandingSearch:
+    withdrawDurationRatio: 0.2
+    withdrawOffset: [0, 0, 0.04] # [m]
+    preApproachDurationRatio: 0.25
+    approachDurationRatio: 0.2
+    approachOffset: [0, 0, 0.04] # [m]
 # for the external planner HybridPlanner
 HybridPlanner:
   Tp: 6
@@ -109,6 +123,13 @@ robot_models:
       leftAnkleOffset: [-0.03, -0.02] # target center of foot
     torso:
       pitch: 0.0
+    SwingTraj:
+      type: LandingSearch
+      withdrawDurationRatio: 0.2
+      withdrawOffset: [0, 0, 0.04] # [m]
+      preApproachDurationRatio: 0.25
+      approachDurationRatio: 0.2
+      approachOffset: [0, 0, 0.04] # [m]
   hrp5_p:
     sole:
       half_length: 0.11895
@@ -1345,10 +1366,11 @@ StatesLibraries:
 Managed: false
 StepByStep: false
 init: LIPMWalking::Initial
-transitions:
-  - [LIPMWalking::Initial, Standing, LIPMWalking::WalkFSM]
 
-Plugins: [footsteps_planner_plugin, ExternalFootstepPlannerPlugin]
+transitions:
+  - [LIPMWalking::Initial, Standing, LIPMWalking::WalkFSMWithSoftFootState]
+
+# Plugins: [footsteps_planner_plugin, ExternalFootstepPlannerPlugin]
 
 # Set realRobot's joint configuration from encoder readings
 ObserverPipelines:

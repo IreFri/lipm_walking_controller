@@ -137,6 +137,37 @@ Controller::Controller(mc_rbdyn::RobotModulePtr robotModule,
   loadFootstepPlan(initialPlan);
 
   // =========================
+  // Create Swing trajectory generator
+  // =========================
+  if (robotConfig.has("SwingTraj"))
+  {
+    if(robotConfig("SwingTraj").has("type"))
+    {
+      swingTrajType = static_cast<std::string>(robotConfig("SwingTraj")("type"));
+      for(const auto& key: config_("SwingTraj")(swingTrajType).keys())
+      {
+        config_("SwingTraj")(swingTrajType).add(key, robotConfig("SwingTraj")(key));
+      }
+
+      mc_rtc::log::info("Loaded {} from {}:\n{}", swingTrajType, robot().name(), config_("SwingTraj")(swingTrajType).dump(true, true));
+
+      if(swingTrajType == "CubicSplineSimple")
+      {
+        BWC::SwingTrajCubicSplineSimple::loadDefaultConfig(config_("SwingTraj")("CubicSplineSimple", config_("SwingTraj")(swingTrajType)));
+      }
+      else if(swingTrajType == "LandingSearch")
+      {
+        BWC::SwingTrajLandingSearch::loadDefaultConfig(config_("SwingTraj")("LandingSearch", config_("SwingTraj")(swingTrajType)));
+      }
+    }
+    else
+    {
+      mc_rtc::log::error("You did not define the type");
+    }
+  }
+  mc_rtc::log::info("The chosen swing trajectory type is '{}'", swingTrajType);
+
+  // =========================
   // Create Swing foot tasks
   // =========================
   double swingWeight = 1000;
@@ -226,22 +257,33 @@ void Controller::addGUIElements(std::shared_ptr<mc_rtc::gui::StateBuilder> gui)
 
   gui->addElement({"Walking", "CoM"}, Label("Plan name", [this]() { return plan.name; }));
 
-  gui->addElement({"Walking", "Swing"}, Label("Plan name", [this]() { return plan.name; }),
-                  NumberInput(
-                      "Swing height [m]", [this]() { return plan.swingHeight(); },
-                      [this](double height) { plan.swingHeight(height); }),
-                  NumberInput(
-                      "Takeoff duration [s]", [this]() { return plan.takeoffDuration(); },
-                      [this](double duration) { plan.takeoffDuration(duration); }),
-                  NumberInput(
-                      "Takeoff pitch [rad]", [this]() { return plan.takeoffPitch(); },
-                      [this](double pitch) { plan.takeoffPitch(pitch); }),
-                  NumberInput(
-                      "Landing duration [s]", [this]() { return plan.landingDuration(); },
-                      [this](double duration) { plan.landingDuration(duration); }),
-                  NumberInput(
-                      "Landing pitch [rad]", [this]() { return plan.landingPitch(); },
-                      [this](double pitch) { plan.landingPitch(pitch); }));
+  gui->addElement({"Walking", "Swing"}, ComboInput("Type", {"CubicSplineSimple", "DefaultSwingFoot", "LandingSearch"},
+              [this]() { return swingTrajType; },
+              [this](const std::string & v) { swingTrajType = v; }));
+
+  gui->addElement({"Walking", "Swing"}, Label("Plan name", [this]() { return plan.name; }));
+
+  gui->addElement(
+      {"Walking", "Swing", "DefaultSwingFoot"},
+          NumberInput(
+              "Swing height [m]", [this]() { return plan.swingHeight(); },
+              [this](double height) { plan.swingHeight(height); }),
+          NumberInput(
+              "Takeoff duration [s]", [this]() { return plan.takeoffDuration(); },
+              [this](double duration) { plan.takeoffDuration(duration); }),
+          NumberInput(
+              "Takeoff pitch [rad]", [this]() { return plan.takeoffPitch(); },
+              [this](double pitch) { plan.takeoffPitch(pitch); }),
+          NumberInput(
+              "Landing duration [s]", [this]() { return plan.landingDuration(); },
+              [this](double duration) { plan.landingDuration(duration); }),
+          NumberInput(
+              "Landing pitch [rad]", [this]() { return plan.landingPitch(); },
+              [this](double pitch) { plan.landingPitch(pitch); }));
+
+
+  BWC::SwingTrajCubicSplineSimple::addConfigToGUI(*gui, {"Walking", "Swing", "CubicSplineSimple"});
+  BWC::SwingTrajLandingSearch::addConfigToGUI(*gui, {"Walking", "Swing", "LandingSearch"});
 
   gui->addElement({"Walking", "Timings"}, Label("Plan name", [this]() { return plan.name; }),
                   NumberInput(
