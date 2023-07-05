@@ -181,9 +181,11 @@ ___
 
 ## SoftFootState
 
+The name of the controller is `LIPMWalkingSoftFoot` and the project name is `lipm_walking_controller_softfoot` to avoid collision with the default lipm walking.
+
 ### How to clone ?
 ```
-git clone -b topic/SoftFootState git@github.com:IreFri/lipm_walking_controller.git --recursive
+git clone -b topic/SoftFootState git@github.com:IreFri/lipm_walking_controller.git --recursive lipm_walking_controller_softfoot
 ```
 It'll clone directly into the `topic/SoftFootState` branch.
 
@@ -201,9 +203,9 @@ cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=~/mc_rtc_install
 make -j6 && make install
 ```
 
-### Installing `LIPMWalking`
+### Installing `LIPMWalkingSoftFoot`
 ```
-cd ~/path/to/lipm_walking_controller
+cd ~/path/to/lipm_walking_controller_softfoot
 mkdir build
 cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=~/mc_rtc_install
@@ -212,7 +214,7 @@ make -j6 && make install
 
 ### How to configure `SoftFootState`?
 Everytime you modify a .yaml, you need to re-install the controller i.e to run `make install`.
-In `LIPMWalking.in.yaml` you have:
+In `LIPMWalkingSoftFoot.in.yaml` you have:
 1. The default config for swing trajectory from `BaselineWalkingController`:
 ```
 SwingTraj:
@@ -249,6 +251,8 @@ LIPMWalking::SoftFoot::Configured:
   nr_phalanxes: 1
 ```
 In any case, `with_variable_stiffness`, `with_ankle_rotation` and `with_foot_adjustment` can be configured by the GUI too.
+
+4. In `~/.config/mc_rtc.yaml`, the controller name is `LIPMWalkingSoftFoot`
 
 ### How to use?
 1. In the GUI, after clicking on `Walking/Main/Start Standing`, you have now access to `Walking/Swing` where you can select the desired swing trajectory type and configure it.

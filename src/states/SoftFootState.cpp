@@ -1,7 +1,6 @@
 #include <mc_rtc/gui/Form.h>
 
 #include <lipm_walking/SwingTraj.h>
-#include <lipm_walking/swing/SwingTrajLandingSearch.h>
 
 #include "SoftFootState.h"
 
@@ -1279,7 +1278,7 @@ void SoftFootState::updateFootSwingPose(mc_control::fsm::Controller & ctl, const
   }
   else
   {
-    mc_rtc::log::warning("[SoftFootState] The swing trajectory is '{}', if you want an update please use 'LandingSearch'", ctrl.swingTrajType);
+    mc_rtc::log::warning("[SoftFootState] The swing trajectory is '{}', if you want an update please use 'LandingSearch' or 'CubicSplineSimple'", ctrl.swingTrajType);
   }
 }
 

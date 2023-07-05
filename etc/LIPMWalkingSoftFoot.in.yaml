@@ -1354,10 +1354,10 @@ robots:
 #
 StatesFiles:
 - "@MC_STATES_DEFAULT_INSTALL_PREFIX@/data"
-- "@MC_CONTROLLER_INSTALL_PREFIX@/lipm_walking_controller/states/data"
+- "@MC_CONTROLLER_INSTALL_PREFIX@/lipm_walking_controller_softfoot/states/data"
 StatesLibraries:
 - "@MC_STATES_DEFAULT_INSTALL_PREFIX@"
-- "@MC_CONTROLLER_INSTALL_PREFIX@/lipm_walking_controller/states"
+- "@MC_CONTROLLER_INSTALL_PREFIX@/lipm_walking_controller_softfoot/states"
 Managed: false
 StepByStep: false
 init: LIPMWalking::Initial

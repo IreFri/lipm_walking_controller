@@ -137,6 +137,8 @@ void states::Standing::start()
     gui_.removeElement({"Walking", "Main"}, "Resume walking");
     gui_.removeElement({"Walking", "Main"}, "Start walking");
     gui_.addElement({"Walking", "Main"},
+                    Label("Swing trajectory type", [this]() { return controller().swingTrajType; }));
+    gui_.addElement({"Walking", "Main"},
                     ComboInput(
                         "Footstep plan", ctl.planInterpolator.availablePlans(), [&ctl]() { return ctl.plan.name; },
                         [&ctl](const std::string & name) { ctl.updatePlan(name); }));
@@ -154,6 +156,7 @@ void states::Standing::start()
     gui_.addElement({"Walking", "Main"},
                     Button(!controller().pauseWalking || (supportContact_.id == 0) ? "Start walking" : "Resume walking",
                            [this]() { startWalking(); }));
+
   }
 
   runState(); // don't wait till next cycle to update reference and tasks
@@ -166,6 +169,7 @@ void states::Standing::teardown()
   if(gui())
   {
     gui()->removeCategory({"Standing"});
+    gui()->removeElement({"Walking", "Main"}, "Swing trajectory type");
     gui()->removeElement({"Walking", "Main"}, "Footstep plan");
     gui()->removeElement({"Walking", "Main"}, "Gait");
     gui()->removeElement({"Walking", "Main"}, "Go to middle");

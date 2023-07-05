@@ -27,4 +27,4 @@
 
 #include <lipm_walking/Controller.h>
 
-CONTROLLER_CONSTRUCTOR("LIPMWalking", lipm_walking::Controller)
+CONTROLLER_CONSTRUCTOR("LIPMWalkingSoftFoot", lipm_walking::Controller)

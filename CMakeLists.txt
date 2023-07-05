@@ -26,7 +26,7 @@ cmake_minimum_required(VERSION 3.10)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 14)
 
-set(PROJECT_NAME lipm_walking_controller)
+set(PROJECT_NAME lipm_walking_controller_softfoot)
 set(PROJECT_DESCRIPTION
     "Walking controller based on linear inverted pendulum tracking")
 set(PROJECT_URL https://github.com/stephane-caron/lipm_walking_controller/)
@@ -79,5 +79,5 @@ add_subdirectory(plugins/ExternalFootstepPlanner)
 add_subdirectory(src)
 
 set(PACKAGE_EXTRA_MACROS
-    "set(LIPM_WALKING_STATES_LIBRARIES \"${MC_CONTROLLER_INSTALL_PREFIX}/lipm_walking_controller/states\")
+    "set(LIPM_WALKING_STATES_LIBRARIES \"${MC_CONTROLLER_INSTALL_PREFIX}/lipm_walking_controller_softfoot/states\")
 set(LIPM_WALKING_STATES_FILES \"\${LIPM_WALKING_STATES_LIBRARIES}/data\")")
