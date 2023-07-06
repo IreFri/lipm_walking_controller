@@ -3,7 +3,7 @@
 #include <mc_rtc/version.h>
 #include <mc_control/MCController.h>
 #include <mc_mujoco/devices/RangeSensor.h>
-
+#include <chrono>
 
 namespace lipm_walking
 {
@@ -71,6 +71,8 @@ void RangeSensor::configure(const mc_control::MCController & ctl, const mc_rtc::
         {
           mc_rtc::log::error("[RangeSensor::{}] Could not set the timeout: {}", name_, e.what());
         }
+
+        auto start = std::chrono::high_resolution_clock::now();
         while(true)
         {
           if(serial_port_is_open_)
@@ -81,8 +83,12 @@ void RangeSensor::configure(const mc_control::MCController & ctl, const mc_rtc::
               serial_port_->Read(data_str);
               if(!data_str.empty())
               {
-                const std::lock_guard<std::mutex> lock(sensor_mutex_);
-                sensor_data_ = std::stod(data_str) * 0.001;
+                const double data = std::stod(data_str);
+                if(data != 255.)
+                {
+                  const std::lock_guard<std::mutex> lock(sensor_mutex_);
+                  sensor_data_ = data * 0.001;
+                }
               }
               print_reading_error_once_ = true;
 
@@ -96,6 +102,13 @@ void RangeSensor::configure(const mc_control::MCController & ctl, const mc_rtc::
               }
             }
 
+            {
+              using namespace std::chrono_literals;
+              std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(1.));
+            }
+            const auto now = std::chrono::high_resolution_clock::now();
+            measured_sensor_time_ = std::chrono::duration<double, std::milli>(now - start).count();
+            start = std::chrono::high_resolution_clock::now();
           }
         }
 
@@ -163,11 +176,29 @@ void RangeSensor::addToGUI(const mc_control::MCController &,
           mc_rtc::log::error("[RangeSensor::{}] Could not open the serial port {}", name_, serial_port_name_);
         }
       }),
+    mc_rtc::gui::Button("Try to close the serial port",
+      [this]()
+      {
+        try
+        {
+          serial_port_->Close();
+          serial_port_is_open_ = false;
+        }
+        catch(const std::exception& e)
+        {
+          mc_rtc::log::error("[RangeSensor::{}] Could not close the serial port {}", name_, serial_port_name_);
+        }
+      }),
     mc_rtc::gui::Label("Data",
       [this]()
       {
         const std::lock_guard<std::mutex> lock(sensor_mutex_);
         return (serial_port_is_open_ ? std::to_string(sensor_data_) : "Sensor is not opened");
+      }),
+    mc_rtc::gui::Label("Elapsed time [ms]",
+      [this]()
+      {
+        return measured_sensor_time_;
       })
   );
 }

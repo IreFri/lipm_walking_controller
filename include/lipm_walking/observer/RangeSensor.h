@@ -58,7 +58,7 @@ protected:
   bool serial_port_is_open_ = false; ///< To keep track of the serial port opening/closing
   bool print_reading_error_once_ = true; ///< To keep track of the serial port error printing
   double sensor_data_ = 0.; ///< Data read from the sensor
-  double measured_sensor_rate_; ///< Define the sensor rate
+  double measured_sensor_time_; ///< Measured the sensor elapsed time
 };
 
 } /* lipm_walking */
