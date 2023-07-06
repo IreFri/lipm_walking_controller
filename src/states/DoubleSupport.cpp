@@ -115,7 +115,8 @@ void states::DoubleSupport::start()
   {
     mc_rtc::log::warning("[DoubleSupport] Stepping aborted at t = {}, poor contact detected!", stateTime_);
     mc_rtc::log::info("[DoubleSupport] Stopping during this DSP, remaining time: {}", remTime_);
-    stopDuringThisDSP_ = true;
+    stopDuringThisDSP_ = false;
+    mc_rtc::log::warning("We should STOP here but we continue to walk");
   }
 
   if(stopDuringThisDSP_)
