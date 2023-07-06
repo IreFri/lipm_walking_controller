@@ -97,6 +97,23 @@ void SoftFootState::start()
   ctl.gui()->addElement({"SoftFoot"}, mc_rtc::gui::Label("PhalangesStiffness", [this]() { return this->PhalangesStiffness_; }));
   ctl.logger().addLogEntry("PhalangesStiffness", [this]() { return PhalangesStiffness_; });
 
+  ctl.gui()->addElement({"SoftFoot"},
+    mc_rtc::gui::Label("RightRangeSensor",
+      [this] ()
+      {
+        const std::string sensor_name = range_sensor_name_[Foot::Right];
+        const std::lock_guard<std::mutex> lock(range_sensor_mutex_);
+        return controller().robot().device<mc_mujoco::RangeSensor>(sensor_name).data();
+      }),
+    mc_rtc::gui::Label("LeftRangeSensor",
+      [this] ()
+      {
+        const std::string sensor_name = range_sensor_name_[Foot::Left];
+        const std::lock_guard<std::mutex> lock(range_sensor_mutex_);
+        return controller().robot().device<mc_mujoco::RangeSensor>(sensor_name).data();
+      })
+  );
+
   ctl.gui()->addElement({"SoftFoot", "Config"},
     mc_rtc::gui::Checkbox("With variable stiffness", [this]() { return with_variable_stiffness_; }, [this]() { with_variable_stiffness_ = !with_variable_stiffness_; }),
     mc_rtc::gui::Checkbox("With ankle rotation", [this]() { return with_ankle_rotation_; }, [this]() { with_ankle_rotation_ = !with_ankle_rotation_; }),
