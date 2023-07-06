@@ -191,12 +191,23 @@ It'll clone directly into the `topic/SoftFootState` branch.
 
 ### Dependencies
 * mc_mujoco
+* copra
 * TrajectoryCollection
 
 ### Installing `TrajectoryCollection`
 You need to do the following
 ```
 cd ~/path/to/ws_bwc/src/isri-aist/TrajectoryCollection
+mkdir build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=~/path/to/mc_rtc_install
+make -j6 && make install
+```
+
+### Installing `copra
+```
+git clone https://github.com/jrl-umi3218/copra.git --recursive
+cd copra
 mkdir build
 cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=~/path/to/mc_rtc_install
@@ -252,7 +263,23 @@ SwingTraj:
   approachOffset: [0, 0, 0.015] # [m]
   swingOffset: [0, 0, 0.05] # [m]
 ```
-3. To configure `SoftFootState` you can edit `src/states/etc/states.yaml`:
+3. Inside `ObserverPipelines` you now have (the acquisition is roughly 10Hz which seems to be the maximum based on documentation):
+```
+- type: RangeSensor
+      name: LeftRangeSensor
+      gui: true
+      config:
+        range_sensor: "LeftFootRangeSensor"
+        serial_port: "/dev/ttyUSB0"
+- type: RangeSensor
+  name: RightRangeSensor
+  gui: true
+  config:
+    range_sensor: "RightFootRangeSensor"
+    serial_port: "/dev/ttyUSB1"
+```
+
+To configure `SoftFootState` you can edit `src/states/etc/states.yaml`:
 ```
 LIPMWalking::SoftFoot::Configured:
   base: LIPMWalking::SoftFoot
@@ -263,13 +290,27 @@ LIPMWalking::SoftFoot::Configured:
 ```
 In any case, `with_variable_stiffness`, `with_ankle_rotation` and `with_foot_adjustment` can be configured by the GUI too.
 
-4. In `~/.config/mc_rtc.yaml`, the controller name is `LIPMWalkingSoftFoot`
+Lastly, you need to update `~/.config/mc_rtc.yaml`, the controller name is `LIPMWalkingSoftFoot`
 
 ### How to use?
 1. In the GUI, after clicking on `Walking/Main/Start Standing`, you have now access to `Walking/Swing` where you can select the desired swing trajectory type and configure it.
 2. If you want to use the foot target pose update computed by `SoftFootState`, you need to use `LandingSearch` or `CubicSplineSimple`.
 As a note: `CubicSplineSimple` seems slightly better, it's recommended to use it.
+3. If you want to increase the distance in-between the foot for the walk, you need to do it via the GUI `Walking/Footstep/Extra step width [m]`
+4. You can see the `RangeSensor` device in `ObserverPipelines/[Left/Right]RangeSensor`
+5. You can also see the range sensor distance measurements in `SoftFoot`
 
+### How to know where the sensor is in `/dev/`?
+You can run `dmesg` and you should find something like:
+```
+[ 7877.541669] usb 1-4: new full-speed USB device number 11 using xhci_hcd
+[ 7877.691333] usb 1-4: New USB device found, idVendor=1a86, idProduct=7523, bcdDevice= 2.64
+[ 7877.691348] usb 1-4: New USB device strings: Mfr=0, Product=2, SerialNumber=0
+[ 7877.691354] usb 1-4: Product: USB Serial
+[ 7877.692892] ch341 1-4:1.0: ch341-uart converter detected
+[ 7877.693636] usb 1-4: ch341-uart converter now attached to ttyUSB0
+```
+Here the intersting part is `ttyUSB0`.
 
 ### How to debug a `rtcd = 0`?
 Before to try on the robot, the simple test is to do the following
