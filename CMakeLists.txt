@@ -74,6 +74,9 @@ find_package(catkin REQUIRED COMPONENTS roscpp variable_stiffness)
 find_package(mc_mujoco REQUIRED)
 
 add_subdirectory(3rd-party/qhull EXCLUDE_FROM_ALL)
+set(BUILD_TESTS OFF)
+set(SERIAL_BUILD_SHARED_LIBS ON)
+add_subdirectory(3rd-party/CppLinuxSerial EXCLUDE_FROM_ALL)
 
 add_subdirectory(plugins/ExternalFootstepPlanner)
 add_subdirectory(src)

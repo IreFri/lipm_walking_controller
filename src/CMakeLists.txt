@@ -76,8 +76,17 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/etc/LIPMWalkingSoftFoot.yaml"
 
 add_subdirectory(states)
 
+macro(add_simple_observer observer_name)
+# mc_observers doesn't actually depend on mc_control, but the observer's implementation does
+target_link_libraries(${observer_name} PUBLIC mc_rtc::mc_control)
+endmacro()
+
+add_observer(RangeSensor "observer/RangeSensor.cpp" "${CMAKE_SOURCE_DIR}/include/lipm_walking/observer/RangeSensor.h")
+target_link_libraries(RangeSensor PUBLIC mc_rtc::mc_control mc_mujoco::devices)
+target_link_libraries(RangeSensor PRIVATE CppLinuxSerial::CppLinuxSerial)
+
 install(
-  TARGETS ${PROJECT_NAME} qhull_r qhullcpp
+  TARGETS ${PROJECT_NAME} CppLinuxSerial qhull_r qhullcpp
   EXPORT "${TARGETS_EXPORT_NAME}"
   RUNTIME DESTINATION bin
   LIBRARY DESTINATION lib

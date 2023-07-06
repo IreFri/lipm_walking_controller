@@ -4,3 +4,6 @@
 [submodule "3rd-party/qhull"]
 	path = 3rd-party/qhull
 	url = https://github.com/qhull/qhull.git
+[submodule "3rd-party/CppLinuxSerial"]
+	path = 3rd-party/CppLinuxSerial
+	url = https://github.com/gbmhunter/CppLinuxSerial
