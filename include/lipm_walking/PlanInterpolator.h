@@ -346,7 +346,7 @@ private:
   bool startWithRightFootstep_ = true;
   double desiredStepAngle_ = 10. * M_PI / 180.; // [rad]
   double desiredStepLength_ = 0.2; // [m]
-  double extraStepWidth_ = 0.; // [m]
+  double extraStepWidth_ = 0.02; // [m]
   double outputVel_ = 0.25; // [m] / [s]
   double stepAngle_ = 0.0; // [deg]
   double stepLength_ = 0.2; /**< Step length in [m] */
