@@ -86,7 +86,9 @@ void RangeSensor::configure(const mc_control::MCController & ctl, const mc_rtc::
                 const double data = std::stod(data_str);
                 if(data != 255.)
                 {
+                  // const std::lock_guard<std::mutex> lock(sensor_mutex_);
                   const std::lock_guard<std::mutex> lock(sensor_mutex_);
+                  std::cout << data << std::endl;
                   sensor_data_ = data * 0.001;
                 }
               }
