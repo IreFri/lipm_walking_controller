@@ -5,6 +5,19 @@
 #include <mc_mujoco/devices/RangeSensor.h>
 #include <chrono>
 
+#include <boost/filesystem.hpp>
+extern "C"
+{
+#include "usbio.h"
+
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <termios.h>
+#include <unistd.h>
+}
+
 namespace lipm_walking
 {
 
@@ -38,86 +51,169 @@ void RangeSensor::configure(const mc_control::MCController & ctl, const mc_rtc::
   mc_rtc::log::info("[RangeSensor::{}] 'range_sensor' is {}", name_, serial_port_name_);
 
   // Configure the serial port
-  serial_port_ = std::make_unique<mn::CppLinuxSerial::SerialPort>(serial_port_name_, mn::CppLinuxSerial::BaudRate::B_115200);
+  // serial_port_ = std::make_unique<mn::CppLinuxSerial::SerialPort>(serial_port_name_, mn::CppLinuxSerial::BaudRate::B_115200);
 
   loop_sensor_ = std::thread(
       [this]()
       {
+        // try
+        // {
+        //   serial_port_->SetTimeout(100);
+        // }
+        // catch(const std::exception& e)
+        // {
+        //   mc_rtc::log::error("[RangeSensor::{}] Could not set the timeout: {}", name_, e.what());
+        // }
+
+        // // Open the serial port
+        // try
+        // {
+        //   serial_port_->Open();
+        //   serial_port_is_open_ = true;
+        // }
+        // catch(const std::exception& e)
+        // {
+        //   mc_rtc::log::error("[RangeSensor::{}] Could not open the serial port {}", name_, serial_port_name_);
+        // }
+
+        // try
+        // {
+        //   serial_port_->SetTimeout(1);
+        // }
+        // catch(const std::exception& e)
+        // {
+        //   mc_rtc::log::error("[RangeSensor::{}] Could not set the timeout: {}", name_, e.what());
+        // }
+
+        std::cout << "[wireless] Looking wireless button " << serial_port_name_ << " ..." << std::endl;
+        auto serial_port = std::string{};
         try
         {
-          serial_port_->SetTimeout(100);
+          serial_port = boost::filesystem::canonical(serial_port_name_).string();
         }
-        catch(const std::exception& e)
+        catch(...)
         {
-          mc_rtc::log::error("[RangeSensor::{}] Could not set the timeout: {}", name_, e.what());
+          connected_ = false;
+          std::cerr << "[wireless] Serial port " << serial_port_name_ << " is neither a device handle nor a symbolic link"
+                    << std::endl;
+          return;
         }
 
-        // Open the serial port
-        try
+        // Try to find wireless button
+        int fd = open(serial_port.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
+        if(fd < 0)
         {
-          serial_port_->Open();
-          serial_port_is_open_ = true;
+          connected_ = false;
+          close(fd);
+          std::cerr << "[wireless] No wireless button found" << std::endl;
+          return;
         }
-        catch(const std::exception& e)
+        else
         {
-          mc_rtc::log::error("[RangeSensor::{}] Could not open the serial port {}", name_, serial_port_name_);
-        }
-
-        try
-        {
-          serial_port_->SetTimeout(1);
-        }
-        catch(const std::exception& e)
-        {
-          mc_rtc::log::error("[RangeSensor::{}] Could not set the timeout: {}", name_, e.what());
+          std::cout << "[wireless] Found wireless emergency button: " << serial_port << std::endl;
+          connected_ = true;
         }
 
-        auto start = std::chrono::high_resolution_clock::now();
+        fcntl(fd, F_SETFL, 0);
+        const int baudRate = B4800; // B115200;
+        struct termios tio;
+        tcgetattr(fd, &tio);
+        cfsetispeed(&tio, baudRate);
+        cfsetospeed(&tio, baudRate);
+        // cfmakeraw(&tio);
+        // non canonical, non echo back
+        tio.c_lflag &= ~(ECHO | ICANON);
+        // non blocking
+        tio.c_cc[VMIN] = 0;
+        tio.c_cc[VTIME] = 0;
+        tcsetattr(fd, TCSANOW, &tio);
+        // ioctl(fd, TCSETS, &tio);
+
+        prev_time_ = clock::now();
+
+        // auto start = std::chrono::high_resolution_clock::now();
         while(true)
         {
-          if(serial_port_is_open_)
+          char buf[255];
+          int len = read(fd, buf, sizeof(buf));
+          if(0 < len)
           {
-            try
+            prev_time_ = clock::now();
+            std::string str = "";
+            std::cout << "The buffer len is " << len << std::endl;
+            for(int i = 0; i < len; i++)
             {
-              std::string data_str;
-              serial_port_->Read(data_str);
-              if(!data_str.empty())
-              {
-                const double data = std::stod(data_str);
-                if(data != 255.)
-                {
-                  // const std::lock_guard<std::mutex> lock(sensor_mutex_);
-                  const std::lock_guard<std::mutex> lock(sensor_mutex_);
-                  std::cout << data << std::endl;
-                  sensor_data_ = data * 0.001;
-                }
-              }
-              print_reading_error_once_ = true;
-
-            }
-            catch(const std::exception& e)
-            {
-              if(!print_reading_error_once_)
-              {
-                mc_rtc::log::error("[RangeSensor::{}] Could not read from the serial port {}", name_, serial_port_name_);
-                print_reading_error_once_ = false;
-              }
+              std::cout << "buf[" << i << "]" << buf[i] << std::endl;
+              str = str + buf[i];
             }
 
+            std::cout << "I am reading this data " << str << std::endl;
+
+            if(!str.empty())
             {
-              using namespace std::chrono_literals;
-              std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(1.));
+              const double data = std::stod(str);
+              if(data != 255.)
+              {
+                // const std::lock_guard<std::mutex> lock(sensor_mutex_);
+                const std::lock_guard<std::mutex> lock(sensor_mutex_);
+                std::cout << data << std::endl;
+                sensor_data_ = data * 0.001;
+              }
             }
-            const auto now = std::chrono::high_resolution_clock::now();
-            measured_sensor_time_ = std::chrono::duration<double, std::milli>(now - start).count();
-            start = std::chrono::high_resolution_clock::now();
           }
+
+          {
+            std::lock_guard<std::mutex> lock(sensor_mutex_);
+            time_since_last_received_ = clock::now() - prev_time_;
+            measured_sensor_time_ = time_since_last_received_.count();
+          }
+
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+          // if(serial_port_is_open_)
+          // {
+          //   try
+          //   {
+          //     std::string data_str;
+          //     serial_port_->Read(data_str);
+          //     if(!data_str.empty())
+          //     {
+          //       const double data = std::stod(data_str);
+          //       if(data != 255.)
+          //       {
+          //         // const std::lock_guard<std::mutex> lock(sensor_mutex_);
+          //         const std::lock_guard<std::mutex> lock(sensor_mutex_);
+          //         std::cout << data << std::endl;
+          //         sensor_data_ = data * 0.001;
+          //       }
+          //     }
+          //     print_reading_error_once_ = true;
+
+          //   }
+          //   catch(const std::exception& e)
+          //   {
+          //     if(!print_reading_error_once_)
+          //     {
+          //       mc_rtc::log::error("[RangeSensor::{}] Could not read from the serial port {}", name_, serial_port_name_);
+          //       print_reading_error_once_ = false;
+          //     }
+          //   }
+
+          //   {
+          //     using namespace std::chrono_literals;
+          //     std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(1.));
+          //   }
+          //   const auto now = std::chrono::high_resolution_clock::now();
+          //   measured_sensor_time_ = std::chrono::duration<double, std::milli>(now - start).count();
+          //   start = std::chrono::high_resolution_clock::now();
+          // }
         }
 
-        if(serial_port_is_open_)
-        {
-          serial_port_->Close();
-        }
+        close(fd);
+
+        // if(serial_port_is_open_)
+        // {
+        //   serial_port_->Close();
+        // }
 
       }
   );
@@ -170,7 +266,7 @@ void RangeSensor::addToGUI(const mc_control::MCController &,
       {
         try
         {
-          serial_port_->Open();
+          // serial_port_->Open();
           serial_port_is_open_ = true;
         }
         catch(const std::exception& e)
@@ -183,7 +279,7 @@ void RangeSensor::addToGUI(const mc_control::MCController &,
       {
         try
         {
-          serial_port_->Close();
+          // serial_port_->Close();
           serial_port_is_open_ = false;
         }
         catch(const std::exception& e)

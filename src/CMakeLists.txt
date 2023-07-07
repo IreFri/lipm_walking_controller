@@ -81,9 +81,10 @@ macro(add_simple_observer observer_name)
 target_link_libraries(${observer_name} PUBLIC mc_rtc::mc_control)
 endmacro()
 
-add_observer(RangeSensor "observer/RangeSensor.cpp" "${CMAKE_SOURCE_DIR}/include/lipm_walking/observer/RangeSensor.h")
+add_observer(RangeSensor observer/usbio.c observer/usbio.h observer/usbio_private.h observer/RangeSensor.cpp "${CMAKE_SOURCE_DIR}/include/lipm_walking/observer/RangeSensor.h")
 target_link_libraries(RangeSensor PUBLIC mc_rtc::mc_control mc_mujoco::devices)
 target_link_libraries(RangeSensor PRIVATE CppLinuxSerial::CppLinuxSerial)
+target_link_libraries(RangeSensor PUBLIC Boost::filesystem)
 
 install(
   TARGETS ${PROJECT_NAME} CppLinuxSerial qhull_r qhullcpp

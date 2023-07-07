@@ -24,6 +24,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 14)
 
 set(PROJECT_NAME lipm_walking_controller_softfoot)
@@ -45,7 +46,7 @@ set(CXX_DISABLE_WERROR ON)
 
 include(cmake/base.cmake)
 
-project(${PROJECT_NAME} CXX)
+project(${PROJECT_NAME} LANGUAGES C CXX)
 
 add_project_dependency(copra REQUIRED)
 add_project_dependency(mc_rtc REQUIRED)
