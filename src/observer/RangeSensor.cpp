@@ -132,6 +132,13 @@ void RangeSensor::configure(const mc_control::MCController & ctl, const mc_rtc::
         prev_time_ = clock::now();
 
         // auto start = std::chrono::high_resolution_clock::now();
+
+        // https://stackoverflow.com/questions/8888748/how-to-check-if-given-c-string-or-char-contains-only-digits
+        auto is_digits = [](const std::string & str)
+        {
+          return std::all_of(str.begin(), str.end(), ::isdigit);
+        };
+
         while(true)
         {
           char buf[255];
@@ -149,7 +156,7 @@ void RangeSensor::configure(const mc_control::MCController & ctl, const mc_rtc::
 
             std::cout << "I am reading this data " << str << std::endl;
 
-            if(!str.empty() && str != " ")
+            if(!str.empty() && is_digits(str))
             {
               const double data = std::stod(str);
               if(data != 255.)
