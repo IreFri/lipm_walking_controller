@@ -6,6 +6,7 @@
 #include <chrono>
 
 #include <boost/filesystem.hpp>
+
 extern "C"
 {
 #include "usbio.h"
@@ -50,180 +51,7 @@ void RangeSensor::configure(const mc_control::MCController & ctl, const mc_rtc::
   mc_rtc::log::info("[RangeSensor::{}] 'serial_port' is {}", name_, range_sensor_name_);
   mc_rtc::log::info("[RangeSensor::{}] 'range_sensor' is {}", name_, serial_port_name_);
 
-  // Configure the serial port
-  // serial_port_ = std::make_unique<mn::CppLinuxSerial::SerialPort>(serial_port_name_, mn::CppLinuxSerial::BaudRate::B_115200);
-
-  loop_sensor_ = std::thread(
-      [this]()
-      {
-        // try
-        // {
-        //   serial_port_->SetTimeout(100);
-        // }
-        // catch(const std::exception& e)
-        // {
-        //   mc_rtc::log::error("[RangeSensor::{}] Could not set the timeout: {}", name_, e.what());
-        // }
-
-        // // Open the serial port
-        // try
-        // {
-        //   serial_port_->Open();
-        //   serial_port_is_open_ = true;
-        // }
-        // catch(const std::exception& e)
-        // {
-        //   mc_rtc::log::error("[RangeSensor::{}] Could not open the serial port {}", name_, serial_port_name_);
-        // }
-
-        // try
-        // {
-        //   serial_port_->SetTimeout(1);
-        // }
-        // catch(const std::exception& e)
-        // {
-        //   mc_rtc::log::error("[RangeSensor::{}] Could not set the timeout: {}", name_, e.what());
-        // }
-
-        std::cout << "[wireless] Looking wireless button " << serial_port_name_ << " ..." << std::endl;
-        auto serial_port = std::string{};
-        try
-        {
-          serial_port = boost::filesystem::canonical(serial_port_name_).string();
-        }
-        catch(...)
-        {
-          connected_ = false;
-          std::cerr << "[wireless] Serial port " << serial_port_name_ << " is neither a device handle nor a symbolic link"
-                    << std::endl;
-          return;
-        }
-
-        // Try to find wireless button
-        int fd = open(serial_port.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
-        if(fd < 0)
-        {
-          connected_ = false;
-          close(fd);
-          std::cerr << "[wireless] No wireless button found" << std::endl;
-          return;
-        }
-        else
-        {
-          std::cout << "[wireless] Found wireless emergency button: " << serial_port << std::endl;
-          connected_ = true;
-        }
-
-        fcntl(fd, F_SETFL, 0);
-        const int baudRate = B4800; // B115200;
-        struct termios tio;
-        tcgetattr(fd, &tio);
-        cfsetispeed(&tio, baudRate);
-        cfsetospeed(&tio, baudRate);
-        // cfmakeraw(&tio);
-        // non canonical, non echo back
-        tio.c_lflag &= ~(ECHO | ICANON);
-        // non blocking
-        tio.c_cc[VMIN] = 0;
-        tio.c_cc[VTIME] = 0;
-        tcsetattr(fd, TCSANOW, &tio);
-        // ioctl(fd, TCSETS, &tio);
-
-        prev_time_ = clock::now();
-
-        // auto start = std::chrono::high_resolution_clock::now();
-
-        // https://stackoverflow.com/questions/8888748/how-to-check-if-given-c-string-or-char-contains-only-digits
-        auto is_digits = [](const std::string & str)
-        {
-          return std::all_of(str.begin(), str.end(), ::isdigit);
-        };
-
-        while(true)
-        {
-          char buf[255];
-          int len = read(fd, buf, sizeof(buf));
-          if(0 < len)
-          {
-            prev_time_ = clock::now();
-            std::string str = "";
-            std::cout << "The buffer len is " << len << std::endl;
-            for(int i = 0; i < len; i++)
-            {
-              std::cout << "buf[" << i << "]" << buf[i] << std::endl;
-              str = str + buf[i];
-            }
-
-            std::cout << "I am reading this data " << str << std::endl;
-
-            if(!str.empty() && is_digits(str))
-            {
-              const double data = std::stod(str);
-              if(data != 255.)
-              {
-                // const std::lock_guard<std::mutex> lock(sensor_mutex_);
-                const std::lock_guard<std::mutex> lock(sensor_mutex_);
-                std::cout << data << std::endl;
-                sensor_data_ = data * 0.001;
-              }
-            }
-          }
-
-          {
-            std::lock_guard<std::mutex> lock(sensor_mutex_);
-            time_since_last_received_ = clock::now() - prev_time_;
-            measured_sensor_time_ = time_since_last_received_.count();
-          }
-
-          std::this_thread::sleep_for(std::chrono::milliseconds(1));
-          // if(serial_port_is_open_)
-          // {
-          //   try
-          //   {
-          //     std::string data_str;
-          //     serial_port_->Read(data_str);
-          //     if(!data_str.empty())
-          //     {
-          //       const double data = std::stod(data_str);
-          //       if(data != 255.)
-          //       {
-          //         // const std::lock_guard<std::mutex> lock(sensor_mutex_);
-          //         const std::lock_guard<std::mutex> lock(sensor_mutex_);
-          //         std::cout << data << std::endl;
-          //         sensor_data_ = data * 0.001;
-          //       }
-          //     }
-          //     print_reading_error_once_ = true;
-
-          //   }
-          //   catch(const std::exception& e)
-          //   {
-          //     if(!print_reading_error_once_)
-          //     {
-          //       mc_rtc::log::error("[RangeSensor::{}] Could not read from the serial port {}", name_, serial_port_name_);
-          //       print_reading_error_once_ = false;
-          //     }
-          //   }
-
-          //   {
-          //     using namespace std::chrono_literals;
-          //     std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(1.));
-          //   }
-          //   const auto now = std::chrono::high_resolution_clock::now();
-          //   measured_sensor_time_ = std::chrono::duration<double, std::milli>(now - start).count();
-          //   start = std::chrono::high_resolution_clock::now();
-          // }
-        }
-
-        close(fd);
-
-        // if(serial_port_is_open_)
-        // {
-        //   serial_port_->Close();
-        // }
-
-      }
-  );
+  startReadingDevice();
 
   desc_ = fmt::format("{} (sensor={}, serial={})", name_, range_sensor_name_, serial_port_name_);
 }
@@ -243,7 +71,6 @@ void RangeSensor::update(mc_control::MCController & ctl)
 {
   if(serial_port_is_open_)
   {
-    const std::lock_guard<std::mutex> lock(sensor_mutex_);
     ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).update(sensor_data_);
   }
 }
@@ -255,11 +82,15 @@ void RangeSensor::addToLogger(const mc_control::MCController & ctl,
   logger.addLogEntry(category + "_range", [this, &ctl]() -> double {
     return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).data();
   });
+  logger.addLogEntry(category + "_timestep", [this, &ctl]() -> double {
+    return measured_sensor_time_.load();
+  });
 }
 
 void RangeSensor::removeFromLogger(mc_rtc::Logger & logger, const std::string & category)
 {
   logger.removeLogEntry(category + "_range");
+  logger.removeLogEntry(category + "_timestep");
 }
 
 void RangeSensor::addToGUI(const mc_control::MCController &,
@@ -268,43 +99,358 @@ void RangeSensor::addToGUI(const mc_control::MCController &,
 {
   gui.addElement(category,
     mc_rtc::gui::Label("Serial port", [this](){ return (serial_port_is_open_ ? "Open" : "Close"); }),
-    mc_rtc::gui::Button("Try to open the serial port",
-      [this]()
+    mc_rtc::gui::ComboInput("Serial port selection",
+      {"/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/ttyUSB2", "/dev/ttyUSB3", "/dev/ttyUSB4", "/dev/ttyUSB5", "/dev/ttyUSB6"},
+      [this]() -> std::string
       {
-        try
-        {
-          // serial_port_->Open();
-          serial_port_is_open_ = true;
-        }
-        catch(const std::exception& e)
-        {
-          mc_rtc::log::error("[RangeSensor::{}] Could not open the serial port {}", name_, serial_port_name_);
-        }
-      }),
-    mc_rtc::gui::Button("Try to close the serial port",
-      [this]()
+        return serial_port_name_;
+      },
+      [this](const std::string & s)
       {
-        try
+        serial_port_name_ = s;
+
+        mc_rtc::log::info("[RangeSensor::{}] Changed serial port to {} ", name_, serial_port_name_);
+
+        if(serial_port_is_open_)
         {
-          // serial_port_->Close();
+          is_reading_ = false;
+          loop_sensor_.join();
           serial_port_is_open_ = false;
         }
-        catch(const std::exception& e)
+
+        startReadingDevice();
+      }),
+    mc_rtc::gui::ComboInput("Baudrate selection",
+      {"B0", "B50", "B75", "B110", "B134", "B150", "B200", "B300", "B600", "B1200", "B1800", "B2400", "B4800", "B9600", "B19200", "B38400", "B57600", "B115200", "B230400", "B460800"},
+      [this]() -> std::string
+      {
+        if(baudRate_ == B0)
         {
-          mc_rtc::log::error("[RangeSensor::{}] Could not close the serial port {}", name_, serial_port_name_);
+          return "B0";
+        }
+        else if(baudRate_ == B50)
+        {
+          return "B50";
+        }
+        else if(baudRate_ == B75)
+        {
+          return "B75";
+        }
+        else if(baudRate_ == B110)
+        {
+          return "B110";
+        }
+        else if(baudRate_ == B134)
+        {
+          return "B134";
+        }
+        else if(baudRate_ == B150)
+        {
+          return "B150";
+        }
+        else if(baudRate_ == B200)
+        {
+          return "B200";
+        }
+        else if(baudRate_ == B300)
+        {
+          return "B300";
+        }
+        else if(baudRate_ == B600)
+        {
+          return "B600";
+        }
+        else if(baudRate_ == B1200)
+        {
+          return "B1200";
+        }
+        else if(baudRate_ == B1800)
+        {
+          return "B1800";
+        }
+        else if(baudRate_ == B2400)
+        {
+          return "B2400";
+        }
+        else if(baudRate_ == B4800)
+        {
+          return "B4800";
+        }
+        else if(baudRate_ == B9600)
+        {
+          return "B9600";
+        }
+        else if(baudRate_ == B19200)
+        {
+          return "B19200";
+        }
+        else if(baudRate_ == B38400)
+        {
+          return "B38400";
+        }
+        else if(baudRate_ == B57600)
+        {
+          return "B57600";
+        }
+        else if(baudRate_ == B115200)
+        {
+          return "B115200";
+        }
+        else if(baudRate_ == B230400)
+        {
+          return "B230400";
+        }
+        else if(baudRate_ == B460800)
+        {
+          return "B460800";
+        }
+
+        return "B_0";
+      },
+      [this](const std::string & s)
+      {
+        if(s == "B0")
+        {
+          baudRate_ = B0;
+        }
+        else if(s == "B50")
+        {
+          baudRate_ = B50;
+        }
+        else if(s == "B75")
+        {
+          baudRate_ = B75;
+        }
+        else if(s == "B110")
+        {
+          baudRate_ = B110;
+        }
+        else if(s == "B134")
+        {
+          baudRate_ = B134;
+        }
+        else if(s == "B150")
+        {
+          baudRate_ = B150;
+        }
+        else if(s == "B200")
+        {
+          baudRate_ = B200;
+        }
+        else if(s == "B300")
+        {
+          baudRate_ = B300;
+        }
+        else if(s == "B600")
+        {
+          baudRate_ = B600;
+        }
+        else if(s == "B1200")
+        {
+          baudRate_ = B1200;
+        }
+        else if(s == "B1800")
+        {
+          baudRate_ = B1800;
+        }
+        else if(s == "B2400")
+        {
+          baudRate_ = B2400;
+        }
+        else if(s == "B4800")
+        {
+          baudRate_ = B4800;
+        }
+        else if(s == "B9600")
+        {
+          baudRate_ = B9600;
+        }
+        else if(s == "B19200")
+        {
+          baudRate_ = B19200;
+        }
+        else if(s == "B38400")
+        {
+          baudRate_ = B38400;
+        }
+        else if(s == "B57600")
+        {
+          baudRate_ = B57600;
+        }
+        else if(s == "B115200")
+        {
+          baudRate_ = B115200;
+        }
+        else if(s == "B230400")
+        {
+          baudRate_ = B230400;
+        }
+        else if(s == "B460800")
+        {
+          baudRate_ = B460800;
+        }
+
+        mc_rtc::log::info("[RangeSensor::{}] Changed baudrate to {} ", name_, s);
+
+        if(serial_port_is_open_)
+        {
+          is_reading_ = false;
+          loop_sensor_.join();
+          serial_port_is_open_ = false;
+        }
+        startReadingDevice();
+      }),
+    mc_rtc::gui::Button("Open",
+      [this]()
+      {
+        if(!serial_port_is_open_)
+        {
+          startReadingDevice();
+        }
+        else
+        {
+          mc_rtc::log::warning("[RangeSensor::{}] The device is already opened", name_);
         }
       }),
+    mc_rtc::gui::Button("Close",
+      [this]()
+      {
+        if(serial_port_is_open_)
+        {
+          is_reading_ = false;
+          loop_sensor_.join();
+          serial_port_is_open_ = false;
+        }
+        else
+        {
+          mc_rtc::log::warning("[RangeSensor::{}] The device is already closed", name_);
+        }
+      }),
+    mc_rtc::gui::Checkbox("Debug output", [this]() { return debug_.load(); }, [this]() { debug_ = !debug_.load(); }),
     mc_rtc::gui::Label("Data",
       [this]()
       {
-        const std::lock_guard<std::mutex> lock(sensor_mutex_);
         return (serial_port_is_open_ ? std::to_string(sensor_data_) : "Sensor is not opened");
       }),
     mc_rtc::gui::Label("Elapsed time [ms]",
       [this]()
       {
-        return measured_sensor_time_;
+        return measured_sensor_time_.load();
       })
+  );
+}
+
+void RangeSensor::startReadingDevice()
+{
+  if(loop_sensor_.joinable())
+  {
+    loop_sensor_.join();
+  }
+
+  loop_sensor_ = std::thread(
+    [this]()
+    {
+      mc_rtc::log::info("[RangeSensor::{}] Looking for {} ", name_, serial_port_name_);
+      auto serial_port = std::string{};
+      try
+      {
+        serial_port = boost::filesystem::canonical(serial_port_name_).string();
+      }
+      catch(...)
+      {
+        serial_port_is_open_ = false;
+        mc_rtc::log::error("[RangeSensor::{}] Serial port {} is neither a device handle nor a symbolic link", name_, serial_port_name_);
+        return;
+      }
+
+      // int fd = open(serial_port.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
+      int fd = open(serial_port.c_str(), O_RDWR | O_NOCTTY);
+      if(fd < 0)
+      {
+        serial_port_is_open_ = false;
+        close(fd);
+        mc_rtc::log::error("[RangeSensor::{}] No {} found", name_, serial_port_name_);
+        return;
+      }
+      else
+      {
+        mc_rtc::log::info("[RangeSensor::{}] Found {}", name_, serial_port_name_);
+        serial_port_is_open_ = true;
+      }
+
+      fcntl(fd, F_SETFL, 0);
+      struct termios tio;
+      tcgetattr(fd, &tio);
+      cfsetispeed(&tio, baudRate_);
+      cfsetospeed(&tio, baudRate_);
+      // non canonical, non echo back
+      tio.c_lflag &= ~(ECHO | ICANON);
+      // non blocking
+      tio.c_cc[VMIN] = 0;
+      tio.c_cc[VTIME] = 0;
+      tcsetattr(fd, TCSANOW, &tio);
+
+      prev_time_ = clock::now();
+
+      // https://stackoverflow.com/questions/8888748/how-to-check-if-given-c-string-or-char-contains-only-digits
+      auto is_digits = [](const std::string & str)
+      {
+        return std::all_of(str.begin(), str.end(), ::isdigit);
+      };
+
+      is_reading_ = true;
+      while(is_reading_)
+      {
+        char buf[255];
+        int len = read(fd, buf, sizeof(buf));
+        if(0 < len)
+        {
+          if(debug_.load())
+          {
+            mc_rtc::log::warning("[RangeSensor::{}] The buffer length is {}", name_, len);
+          }
+
+          prev_time_ = clock::now();
+          std::string str = "";
+          // -2 to remove the \n\0 character
+          for(int i = 0; i < len - 2; i++)
+          {
+            str = str + buf[i];
+          }
+
+          if(debug_.load())
+          {
+            mc_rtc::log::warning("[RangeSensor::{}] The buffer data as a string is '{}'", name_, str);
+          }
+
+          if(!str.empty() && is_digits(str))
+          {
+            const double data = std::stod(str);
+            if(data != 255.)
+            {
+              sensor_data_ = data * 0.001;
+              if(debug_.load())
+              {
+                mc_rtc::log::warning("[RangeSensor::{}] The buffer data as a double is {}", name_, data);
+              }
+            }
+          }
+
+          {
+            time_since_last_received_ = clock::now() - prev_time_;
+            measured_sensor_time_ = time_since_last_received_.count();
+            if(debug_.load())
+            {
+              mc_rtc::log::warning("[RangeSensor::{}] Elapsed time between 2 acqusitions {}", name_, measured_sensor_time_);
+            }
+          }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+
+      close(fd);
+      mc_rtc::log::warning("[RangeSensor::{}] Closing the loop to read data on device {}", name_, serial_port_name_);
+    }
   );
 }
 

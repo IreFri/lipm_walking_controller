@@ -4,7 +4,6 @@
 #include <thread>
 #include <mutex>
 #include <memory>
-// #include <CppLinuxSerial/SerialPort.hpp>
 
 namespace lipm_walking
 {
@@ -60,22 +59,20 @@ protected:
   std::string robot_name_ = ""; ///< Name of robot to which the rnage sensor belongs
   std::string range_sensor_name_ = ""; ///< Name of the sensor used
   std::string serial_port_name_ = ""; ///< Name of the serial port
-  // std::unique_ptr<mn::CppLinuxSerial::SerialPort> serial_port_; ///< Serial port used to read the sensor
-  std::thread loop_sensor_; ///< Thread to read the sensor data asynchronously
-  std::mutex sensor_mutex_;
-  bool serial_port_is_open_ = false; ///< To keep track of the serial port opening/closing
   bool print_reading_error_once_ = true; ///< To keep track of the serial port error printing
-  double sensor_data_ = 0.; ///< Data read from the sensor
-  double measured_sensor_time_; ///< Measured the sensor elapsed time
-
-
 
   //
-  std::atomic<bool> emergency_{true};
-  std::atomic<bool> connected_{false};
+  void startReadingDevice();
+
+  std::thread loop_sensor_; ///< Thread to read the sensor data asynchronously
+  std::atomic<bool> debug_{false};
+  std::atomic<bool> is_reading_{false};
+  std::atomic<bool> serial_port_is_open_{false}; ///< To keep track of the serial port opening/closing
+  std::atomic<double> sensor_data_ {0}; ///< Data read from the sensor
+  std::atomic<double> measured_sensor_time_; ///< Measured the sensor elapsed time
+  int baudRate_ = 0000015;
   clock::time_point prev_time_;
   duration_ms time_since_last_received_{0}; // time between two successful reading
-  mutable std::mutex timeMutex_;
   double timeout_ = 1000; // timeout in ms
 };
 
