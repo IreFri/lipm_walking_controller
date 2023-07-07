@@ -149,7 +149,7 @@ void RangeSensor::configure(const mc_control::MCController & ctl, const mc_rtc::
 
             std::cout << "I am reading this data " << str << std::endl;
 
-            if(!str.empty())
+            if(!str.empty() && str != " ")
             {
               const double data = std::stod(str);
               if(data != 255.)
