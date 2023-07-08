@@ -122,23 +122,23 @@ void SoftFootState::start()
 
   ctl.gui()->addXYPlot(
     "SoftFoot",
-    // mc_rtc::gui::plot::Polygon("Ground",
-    //   [&ctl, this]()
-    //   {
-    //     // Construct Ground Polygon
-    //     std::vector<std::array<double, 2>> points;
-    //     // Get current moving foot
-    //     Foot current_moving_foot = getCurrentMovingFoot(ctl);
-    //     // Get the segment
-    //     const auto & raw_segment = ground_segment_[current_moving_foot].raw;
-    //     // Save the selected segment in raw data of ground segment structure
-    //     std::transform(raw_segment.begin(), raw_segment.end(), std::back_inserter(points),
-    //       [](const Eigen::Vector3d & v) { return std::array<double, 2>{v.x(), v.z()}; });
-    //     // Create polygon
-    //     auto polygon = mc_rtc::gui::plot::PolygonDescription(points, mc_rtc::gui::Color::Magenta);
-    //     polygon.closed(false);
-    //     return polygon;
-    //   }),
+    mc_rtc::gui::plot::Polygon("Ground",
+      [&ctl, this]()
+      {
+        // Construct Ground Polygon
+        std::vector<std::array<double, 2>> points;
+        // Get current moving foot
+        Foot current_moving_foot = getCurrentMovingFoot(ctl);
+        // Get the segment
+        const auto & raw_segment = ground_segment_[current_moving_foot].raw;
+        // Save the selected segment in raw data of ground segment structure
+        std::transform(raw_segment.begin(), raw_segment.end(), std::back_inserter(points),
+          [](const Eigen::Vector3d & v) { return std::array<double, 2>{v.x(), v.z()}; });
+        // Create polygon
+        auto polygon = mc_rtc::gui::plot::PolygonDescription(points, mc_rtc::gui::Color::Magenta);
+        polygon.closed(false);
+        return polygon;
+      }),
     mc_rtc::gui::plot::Polygon("Filtered_Ground",
       [&ctl, this]()
       {
@@ -183,6 +183,46 @@ void SoftFootState::start()
         polygon.closed(false);
         return polygon;
       })
+  );
+
+  ctl.gui()->addXYPlot(
+    "GroundEstimation",
+    mc_rtc::gui::plot::XY("LeftFoot",
+      [this]()
+      {
+        if(!foot_data_[Foot::Left].ground.empty())
+        {
+          return foot_data_[Foot::Left].ground.back().x();
+        }
+        return 0.;
+      },
+      [this]()
+      {
+        if(!foot_data_[Foot::Left].ground.empty())
+        {
+          return foot_data_[Foot::Left].ground.back().z();
+        }
+        return 0.;
+      },
+      mc_rtc::gui::Color::Red),
+    mc_rtc::gui::plot::XY("RightFoot",
+      [this]()
+      {
+        if(!foot_data_[Foot::Right].ground.empty())
+        {
+          return foot_data_[Foot::Right].ground.back().x();
+        }
+        return 0.;
+      },
+      [this]()
+      {
+        if(!foot_data_[Foot::Right].ground.empty())
+        {
+          return foot_data_[Foot::Right].ground.back().z();
+        }
+        return 0.;
+      },
+      mc_rtc::gui::Color::Blue)
   );
 
   // Subscriber for the range sensors
