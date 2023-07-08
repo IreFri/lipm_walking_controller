@@ -95,6 +95,14 @@ void states::DoubleSupport::start()
   auto actualTargetPose = ctl.controlRobot().surfacePose(targetSurfaceName);
   ctl.plan.goToNextFootstep(actualTargetPose);
 
+  if(!ctl.isInOpenLoopTicker() && stateTime_ <= maxAbortPercent_ * duration_ && !checkInitialSupport())
+  {
+    mc_rtc::log::warning("[DoubleSupport] Stepping aborted at t = {}, poor contact detected!", stateTime_);
+    mc_rtc::log::info("[DoubleSupport] Stopping during this DSP, remaining time: {}", remTime_);
+    stopDuringThisDSP_ = false;
+    mc_rtc::log::warning("We should STOP here but we continue to walk");
+  }
+
   if(ctl.isLastDSP()) // called after goToNextFootstep
   {
     stopDuringThisDSP_ = true;
@@ -109,14 +117,6 @@ void states::DoubleSupport::start()
   {
     ctl.setContacts({{ContactState::Left, ctl.supportContact().pose}, {ContactState::Right, ctl.prevContact().pose}});
     targetLeftFootRatio_ = 1.;
-  }
-
-  if(!ctl.isInOpenLoopTicker() && stateTime_ <= maxAbortPercent_ * duration_ && !checkInitialSupport())
-  {
-    mc_rtc::log::warning("[DoubleSupport] Stepping aborted at t = {}, poor contact detected!", stateTime_);
-    mc_rtc::log::info("[DoubleSupport] Stopping during this DSP, remaining time: {}", remTime_);
-    stopDuringThisDSP_ = false;
-    mc_rtc::log::warning("We should STOP here but we continue to walk");
   }
 
   if(stopDuringThisDSP_)
