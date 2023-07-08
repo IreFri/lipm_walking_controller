@@ -19,6 +19,183 @@ extern "C"
 #include <unistd.h>
 }
 
+namespace
+{
+
+int toBaudrate(const std::string& str)
+{
+  if(str == "B0")
+  {
+    return B0;
+  }
+  else if(str == "B50")
+  {
+    return B50;
+  }
+  else if(str == "B75")
+  {
+    return B75;
+  }
+  else if(str == "B110")
+  {
+    return B110;
+  }
+  else if(str == "B134")
+  {
+    return B134;
+  }
+  else if(str == "B150")
+  {
+    return B150;
+  }
+  else if(str == "B200")
+  {
+    return B200;
+  }
+  else if(str == "B300")
+  {
+    return B300;
+  }
+  else if(str == "B600")
+  {
+    return B600;
+  }
+  else if(str == "B1200")
+  {
+    return B1200;
+  }
+  else if(str == "B1800")
+  {
+    return B1800;
+  }
+  else if(str == "B2400")
+  {
+    return B2400;
+  }
+  else if(str == "B4800")
+  {
+    return B4800;
+  }
+  else if(str == "B9600")
+  {
+    return B9600;
+  }
+  else if(str == "B19200")
+  {
+    return B19200;
+  }
+  else if(str == "B38400")
+  {
+    return B38400;
+  }
+  else if(str == "B57600")
+  {
+    return B57600;
+  }
+  else if(str == "B115200")
+  {
+    return B115200;
+  }
+  else if(str == "B230400")
+  {
+    return B230400;
+  }
+  else if(str == "B460800")
+  {
+    return B460800;
+  }
+
+  return 0;
+}
+
+std::string fromBaudrate(int bd)
+{
+  if(bd == B0)
+  {
+    return "B0";
+  }
+  else if(bd == B50)
+  {
+    return "B50";
+  }
+  else if(bd == B75)
+  {
+    return "B75";
+  }
+  else if(bd == B110)
+  {
+    return "B110";
+  }
+  else if(bd == B134)
+  {
+    return "B134";
+  }
+  else if(bd == B150)
+  {
+    return "B150";
+  }
+  else if(bd == B200)
+  {
+    return "B200";
+  }
+  else if(bd == B300)
+  {
+    return "B300";
+  }
+  else if(bd == B600)
+  {
+    return "B600";
+  }
+  else if(bd == B1200)
+  {
+    return "B1200";
+  }
+  else if(bd == B1800)
+  {
+    return "B1800";
+  }
+  else if(bd == B2400)
+  {
+    return "B2400";
+  }
+  else if(bd == B4800)
+  {
+    return "B4800";
+  }
+  else if(bd == B9600)
+  {
+    return "B9600";
+  }
+  else if(bd == B19200)
+  {
+    return "B19200";
+  }
+  else if(bd == B38400)
+  {
+    return "B38400";
+  }
+  else if(bd == B57600)
+  {
+    return "B57600";
+  }
+  else if(bd == B115200)
+  {
+    return "B115200";
+  }
+  else if(bd == B230400)
+  {
+    return "B230400";
+  }
+  else if(bd == B460800)
+  {
+    return "B460800";
+  }
+
+  return "Undefined";
+}
+
+}
+
 namespace lipm_walking
 {
 
@@ -46,6 +223,20 @@ void RangeSensor::configure(const mc_control::MCController & ctl, const mc_rtc::
   else
   {
     mc_rtc::log::error_and_throw<std::invalid_argument>("[RangeSensor::{}] 'serial_port' is mandatory in the configuration.", name_);
+  }
+
+  if(config.has("baudrate"))
+  {
+    const std::string str_baudrate = static_cast<std::string>(config("baudrate"));
+    baudrate_ = toBaudrate(str_baudrate);
+    if(baudrate_ == 0)
+    {
+      mc_rtc::log::error_and_throw<std::invalid_argument>("[RangeSensor::{}] 'baudrate' {} is not a correct value.", name_, str_baudrate);
+    }
+  }
+  else
+  {
+    mc_rtc::log::error_and_throw<std::invalid_argument>("[RangeSensor::{}] 'baudrate' is mandatory in the configuration.", name_);
   }
 
   mc_rtc::log::info("[RangeSensor::{}] 'serial_port' is {}", name_, range_sensor_name_);
@@ -93,7 +284,7 @@ void RangeSensor::removeFromLogger(mc_rtc::Logger & logger, const std::string & 
   logger.removeLogEntry(category + "_timestep");
 }
 
-void RangeSensor::addToGUI(const mc_control::MCController &,
+void RangeSensor::addToGUI(const mc_control::MCController & ctl,
                                 mc_rtc::gui::StateBuilder & gui,
                                 const std::vector<std::string> & category)
 {
@@ -124,172 +315,11 @@ void RangeSensor::addToGUI(const mc_control::MCController &,
       {"B0", "B50", "B75", "B110", "B134", "B150", "B200", "B300", "B600", "B1200", "B1800", "B2400", "B4800", "B9600", "B19200", "B38400", "B57600", "B115200", "B230400", "B460800"},
       [this]() -> std::string
       {
-        if(baudRate_ == B0)
-        {
-          return "B0";
-        }
-        else if(baudRate_ == B50)
-        {
-          return "B50";
-        }
-        else if(baudRate_ == B75)
-        {
-          return "B75";
-        }
-        else if(baudRate_ == B110)
-        {
-          return "B110";
-        }
-        else if(baudRate_ == B134)
-        {
-          return "B134";
-        }
-        else if(baudRate_ == B150)
-        {
-          return "B150";
-        }
-        else if(baudRate_ == B200)
-        {
-          return "B200";
-        }
-        else if(baudRate_ == B300)
-        {
-          return "B300";
-        }
-        else if(baudRate_ == B600)
-        {
-          return "B600";
-        }
-        else if(baudRate_ == B1200)
-        {
-          return "B1200";
-        }
-        else if(baudRate_ == B1800)
-        {
-          return "B1800";
-        }
-        else if(baudRate_ == B2400)
-        {
-          return "B2400";
-        }
-        else if(baudRate_ == B4800)
-        {
-          return "B4800";
-        }
-        else if(baudRate_ == B9600)
-        {
-          return "B9600";
-        }
-        else if(baudRate_ == B19200)
-        {
-          return "B19200";
-        }
-        else if(baudRate_ == B38400)
-        {
-          return "B38400";
-        }
-        else if(baudRate_ == B57600)
-        {
-          return "B57600";
-        }
-        else if(baudRate_ == B115200)
-        {
-          return "B115200";
-        }
-        else if(baudRate_ == B230400)
-        {
-          return "B230400";
-        }
-        else if(baudRate_ == B460800)
-        {
-          return "B460800";
-        }
-
-        return "B_0";
+        return fromBaudrate(baudrate_);
       },
       [this](const std::string & s)
       {
-        if(s == "B0")
-        {
-          baudRate_ = B0;
-        }
-        else if(s == "B50")
-        {
-          baudRate_ = B50;
-        }
-        else if(s == "B75")
-        {
-          baudRate_ = B75;
-        }
-        else if(s == "B110")
-        {
-          baudRate_ = B110;
-        }
-        else if(s == "B134")
-        {
-          baudRate_ = B134;
-        }
-        else if(s == "B150")
-        {
-          baudRate_ = B150;
-        }
-        else if(s == "B200")
-        {
-          baudRate_ = B200;
-        }
-        else if(s == "B300")
-        {
-          baudRate_ = B300;
-        }
-        else if(s == "B600")
-        {
-          baudRate_ = B600;
-        }
-        else if(s == "B1200")
-        {
-          baudRate_ = B1200;
-        }
-        else if(s == "B1800")
-        {
-          baudRate_ = B1800;
-        }
-        else if(s == "B2400")
-        {
-          baudRate_ = B2400;
-        }
-        else if(s == "B4800")
-        {
-          baudRate_ = B4800;
-        }
-        else if(s == "B9600")
-        {
-          baudRate_ = B9600;
-        }
-        else if(s == "B19200")
-        {
-          baudRate_ = B19200;
-        }
-        else if(s == "B38400")
-        {
-          baudRate_ = B38400;
-        }
-        else if(s == "B57600")
-        {
-          baudRate_ = B57600;
-        }
-        else if(s == "B115200")
-        {
-          baudRate_ = B115200;
-        }
-        else if(s == "B230400")
-        {
-          baudRate_ = B230400;
-        }
-        else if(s == "B460800")
-        {
-          baudRate_ = B460800;
-        }
-
+        baudrate_ = toBaudrate(s);
         mc_rtc::log::info("[RangeSensor::{}] Changed baudrate to {} ", name_, s);
 
         if(serial_port_is_open_)
@@ -338,6 +368,12 @@ void RangeSensor::addToGUI(const mc_control::MCController &,
         return measured_sensor_time_.load();
       })
   );
+
+  gui.addPlot(
+    fmt::format("RangeSensor::{}", name_),
+    mc_rtc::gui::plot::X("t", [this, &ctl]() { static double t = 0.; return t += ctl.solver().dt(); }),
+    mc_rtc::gui::plot::Y( "data", [this]() { return sensor_data_.load(); }, mc_rtc::gui::Color::Red)
+  );
 }
 
 void RangeSensor::startReadingDevice()
@@ -381,8 +417,8 @@ void RangeSensor::startReadingDevice()
       fcntl(fd, F_SETFL, 0);
       struct termios tio;
       tcgetattr(fd, &tio);
-      cfsetispeed(&tio, baudRate_);
-      cfsetospeed(&tio, baudRate_);
+      cfsetispeed(&tio, baudrate_);
+      cfsetospeed(&tio, baudrate_);
       // non canonical, non echo back
       tio.c_lflag &= ~(ECHO | ICANON);
       // non blocking

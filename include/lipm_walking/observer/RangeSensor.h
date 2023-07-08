@@ -70,7 +70,7 @@ protected:
   std::atomic<bool> serial_port_is_open_{false}; ///< To keep track of the serial port opening/closing
   std::atomic<double> sensor_data_ {0}; ///< Data read from the sensor
   std::atomic<double> measured_sensor_time_; ///< Measured the sensor elapsed time
-  int baudRate_ = 0000015;
+  int baudrate_ = 0000015;
   clock::time_point prev_time_;
   duration_ms time_since_last_received_{0}; // time between two successful reading
   double timeout_ = 1000; // timeout in ms

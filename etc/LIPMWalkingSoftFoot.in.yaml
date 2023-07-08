@@ -1387,9 +1387,11 @@ ObserverPipelines:
       config:
         range_sensor: "LeftFootRangeSensor"
         serial_port: "/dev/ttyUSB0"
+        baudrate: B115200
     - type: RangeSensor
       name: RightRangeSensor
       gui: true
       config:
         range_sensor: "RightFootRangeSensor"
         serial_port: "/dev/ttyUSB1"
+        baudrate: B115200
