@@ -471,6 +471,14 @@ void RangeSensor::startReadingDevice()
               }
             }
           }
+          else if(str == "Try to initialize VL6180x ...")
+          {
+            mc_rtc::log::error("[RangeSensor::{}] Try to initialize VL6180x ...'", name_, str);
+          }
+          else if(str == "[Re]Boot of the ArduinoNano")
+          {
+            mc_rtc::log::error("[RangeSensor::{}] The ArduinoNano connection (?) was reboot by itself?", name_);
+          }
 
           {
             time_since_last_received_ = clock::now() - prev_time_;

@@ -1332,6 +1332,7 @@ void SoftFootState::updateFootSwingPose(mc_control::fsm::Controller & ctl, const
       mc_rtc::log::info("[SoftFootState] Update the rotation");
       ctrl.swingTraj->updatePitch(desired_angle);
     }
+    ctrl.plan.updateTargetContact(ctrl.swingTraj->endPose_);
   }
   else
   {

@@ -489,7 +489,8 @@ void Controller::warnIfRobotIsInTheAir()
 void Controller::loadFootstepPlan(std::string name)
 {
   bool loadingNewPlan = (plan.name != name);
-  double initHeight = (plan.name.length() > 0) ? plan.supportContact().p().z() : 0.;
+  double initHeight = 0.; //(plan.name.length() > 0) ? plan.supportContact().p().z() : 0.;
+  mc_rtc::log::warning("[Controller] Force 'initHeight' to be 0");
   FootstepPlan defaultPlan = planInterpolator.getPlan(name);
   if(loadingNewPlan)
   {
