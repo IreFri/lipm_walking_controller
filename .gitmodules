@@ -7,3 +7,9 @@
 [submodule "3rd-party/CppLinuxSerial"]
 	path = 3rd-party/CppLinuxSerial
 	url = https://github.com/gbmhunter/CppLinuxSerial
+[submodule "3rd-party/serial"]
+	path = 3rd-party/serial
+	url = https://github.com/wjwwood/serial.git
+[submodule "3rd-party/libuino"]
+	path = 3rd-party/libuino
+	url = https://github.com/julianwhite/libuino.git

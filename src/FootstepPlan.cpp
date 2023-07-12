@@ -278,4 +278,5 @@ void FootstepPlan::removeGUIElements(mc_rtc::gui::StateBuilder & gui)
   gui.removeCategory({"Markers", "Footsteps", "Plan"});
 }
 
+
 } // namespace lipm_walking

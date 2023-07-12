@@ -78,9 +78,11 @@ add_subdirectory(3rd-party/qhull EXCLUDE_FROM_ALL)
 set(BUILD_TESTS OFF)
 set(SERIAL_BUILD_SHARED_LIBS ON)
 add_subdirectory(3rd-party/CppLinuxSerial EXCLUDE_FROM_ALL)
+add_subdirectory(3rd-party/serial EXCLUDE_FROM_ALL)
 
 add_subdirectory(plugins/ExternalFootstepPlanner)
 add_subdirectory(src)
+add_subdirectory(nano)
 
 set(PACKAGE_EXTRA_MACROS
     "set(LIPM_WALKING_STATES_LIBRARIES \"${MC_CONTROLLER_INSTALL_PREFIX}/lipm_walking_controller_softfoot/states\")
