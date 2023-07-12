@@ -96,9 +96,9 @@ robot_models:
           weight: 500
       dcm_bias:
         dcmMeasureErrorStd: 0.001
-        biasDriftPerSeconStd: 0.0001
+        # biasDriftPerSeconStd: 0.0001
         zmpMeasureErrorStd: 0.0005
-        biasLimit: [0.05, 0.02]
+        biasLimit: [0.05, 0.05]
         withDCMBias: true
       external_wrench:
         ## general ##
@@ -643,10 +643,10 @@ plans:
       com_height: 0.817301
       contacts:
         - pose:
-            translation: [0.0, -0.07, 0.0]
+            translation: [0.0, -0.15, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.0, 0.07, 0.0]
+            translation: [0.0, 0.15, 0.0]
           surface: LeftFootCenter
     custom_lateral:
       double_support_duration: 0.4
