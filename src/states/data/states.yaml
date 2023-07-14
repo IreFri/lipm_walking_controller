@@ -13,9 +13,9 @@ LIPMWalking::WalkFSM:
 LIPMWalking::SoftFoot::Configured:
   base: LIPMWalking::SoftFoot
   with_variable_stiffness: false
-  with_ankle_rotation: true
+  with_ankle_rotation: false
   with_foot_adjustment: false
-  nr_phalanxes: 1
+  nr_phalanx: 1
 
 LIPMWalking::WalkFSMWithSoftFootState:
   base: Parallel

@@ -639,7 +639,7 @@ plans:
       double_support_duration: 0.4
       single_support_duration: 1.2
       step_length: 0.15
-      swing_height: 0.04
+      swing_height: 0.06
       com_height: 0.817301
       contacts:
         - pose:
