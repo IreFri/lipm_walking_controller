@@ -337,7 +337,7 @@ void SoftFootState::runState()
     // Continue only if we have enough data such as the foot is smaller than the estimated ground
     if(!ground_segment_[current_moving_foot].raw.empty())
     {
-      if(ground_segment_[current_moving_foot].raw.back().x() - ground_segment_[current_moving_foot].raw.front().x() > 0.95 * foot_length_)
+      if(ground_segment_[current_moving_foot].raw.back().x() - ground_segment_[current_moving_foot].raw.front().x() > 0.65 * foot_length_)
       {
         // Compute the altitude profile
         extractAltitudeProfileFromGroundSegment(current_moving_foot);

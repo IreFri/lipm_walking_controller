@@ -470,7 +470,7 @@ private:
   double landingDuration_ = 0.15; // [s]
   double landingPitch_ = 0.;
   double singleSupportDuration_ = 0.8; // [s]
-  double swingHeight_ = 0.04; // [m]
+  double swingHeight_ = 0.06; // [m]
   double takeoffDuration_ = 0.05; // [s]
   double takeoffPitch_ = 0.;
   double torsoPitch_ = -100.;
