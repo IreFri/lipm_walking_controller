@@ -1302,9 +1302,6 @@ void SoftFootState::computeFootLandingAngle(const Foot & current_moving_foot, co
   // Keep highest altitude
   foot_data_[current_moving_foot].position_offset_z = highest_point_on_convex.z();
   // foot_data_[current_moving_foot].position_offset_z = p_1.z();
-
-  mc_rtc::log::info("[SoftFootState] angle {} [rad] {} [deg]", foot_data_[current_moving_foot].angle, foot_data_[current_moving_foot].angle * 180. / M_PI);
-  mc_rtc::log::info("[SoftFootState] position_offset_z for landing {}", foot_data_[current_moving_foot].position_offset_z);
 }
 
 void SoftFootState::updateFootSwingPose(mc_control::fsm::Controller & ctl, const Foot & current_moving_foot, const sva::PTransformd & X_0_landing)
@@ -1322,14 +1319,20 @@ void SoftFootState::updateFootSwingPose(mc_control::fsm::Controller & ctl, const
   {
     if(with_foot_adjustment_)
     {
-      mc_rtc::log::info("[SoftFootState] Update the x and z");
+      mc_rtc::log::info("[SoftFootState] position_offset_x for landing {}", foot_data_[current_moving_foot].position_offset_x);
+      mc_rtc::log::info("[SoftFootState] position_offset_z for landing {}", foot_data_[current_moving_foot].position_offset_z);
       ctrl.swingTraj->updatePosXZ(desired_offset_position_x, desired_offset_position_z);
+      if(with_ankle_rotation_)
+      {
+        mc_rtc::log::info("[SoftFootState] angle {} [rad] {} [deg]", foot_data_[current_moving_foot].angle, foot_data_[current_moving_foot].angle * 180. / M_PI);
+        ctrl.swingTraj->updatePitch(desired_angle);
+      }
     }
-    if(!with_foot_adjustment_ && with_ankle_rotation_)
+    else if(!with_foot_adjustment_ && with_ankle_rotation_)
     {
-      mc_rtc::log::info("[SoftFootState] Only update the z");
+      mc_rtc::log::info("[SoftFootState] position_offset_z for landing {}", foot_data_[current_moving_foot].position_offset_z);
       ctrl.swingTraj->updatePosXZ(0, desired_offset_position_z);
-      mc_rtc::log::info("[SoftFootState] Update the rotation");
+      mc_rtc::log::info("[SoftFootState] angle {} [rad] {} [deg]", foot_data_[current_moving_foot].angle, foot_data_[current_moving_foot].angle * 180. / M_PI);
       ctrl.swingTraj->updatePitch(desired_angle);
     }
     ctrl.plan.updateTargetContact(ctrl.swingTraj->endPose_);
