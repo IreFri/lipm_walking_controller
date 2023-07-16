@@ -1341,6 +1341,7 @@ void SoftFootState::updateFootSwingPose(mc_control::fsm::Controller & ctl, const
   double desired_angle = foot_data_[current_moving_foot].angle;
   double desired_offset_position_x = foot_data_[current_moving_foot].position_offset_x;
   double desired_offset_position_z = foot_data_[current_moving_foot].position_offset_z;
+  // double desired_offset_position_z = 0; // If I want to try without correcting the z altitude at landing
   // Dirty access to swing traj
 
   // Follow Murooka-san code to update, sorry for the dirty access
