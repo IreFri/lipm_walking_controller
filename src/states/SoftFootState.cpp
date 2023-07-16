@@ -117,7 +117,42 @@ void SoftFootState::start()
   ctl.gui()->addElement({"SoftFoot", "Config"},
     mc_rtc::gui::Checkbox("With variable stiffness", [this]() { return with_variable_stiffness_; }, [this]() { with_variable_stiffness_ = !with_variable_stiffness_; }),
     mc_rtc::gui::Checkbox("With ankle rotation", [this]() { return with_ankle_rotation_; }, [this]() { with_ankle_rotation_ = !with_ankle_rotation_; }),
-    mc_rtc::gui::Checkbox("With position adjustment", [this]() { return with_foot_adjustment_; }, [this]() { with_foot_adjustment_ = !with_foot_adjustment_; })
+    mc_rtc::gui::Checkbox("With position adjustment", [this]() { return with_foot_adjustment_; }, [this]() { with_foot_adjustment_ = !with_foot_adjustment_; }),
+    mc_rtc::gui::NumberInput("Delay of estimation [s]",
+      [this]() { return delay_of_estimation_; },
+      [this, &ctl](double delay_of_estimation)
+      {
+        if(delay_of_estimation_ < ctl.solver().dt())
+        {
+          mc_rtc::log::error("[SoftFootState] Delay of estimation has to be superior or equal to {} [s]", ctl.solver().dt());
+          return;
+        }
+        delay_of_estimation_ = delay_of_estimation;
+        //
+        const size_t new_size = delay_of_estimation_ / ctl.solver().dt();
+        auto right = Circular_Buffer<sva::PTransformd>(new_size);
+        auto left = Circular_Buffer<sva::PTransformd>(new_size);
+        //
+        const size_t current_size = past_foot_pose_[Foot::Right].size();
+        //
+        if(new_size < current_size)
+        {
+          for(size_t i = 0; i < current_size - new_size; ++i)
+          {
+            past_foot_pose_[Foot::Right].dequeue();
+            past_foot_pose_[Foot::Left].dequeue();
+          }
+        }
+        //
+        for(size_t i = 0; i < past_foot_pose_[Foot::Right].size(); ++i)
+        {
+          right.enqueue(past_foot_pose_[Foot::Right].dequeue());
+          left.enqueue(past_foot_pose_[Foot::Left].dequeue());
+        }
+        past_foot_pose_[Foot::Right] = right;
+        past_foot_pose_[Foot::Left] = left;
+
+      })
   );
 
   ctl.gui()->addXYPlot(
@@ -225,6 +260,10 @@ void SoftFootState::start()
       mc_rtc::gui::Color::Blue)
   );
 
+  //
+  past_foot_pose_[Foot::Right] = Circular_Buffer<sva::PTransformd>(delay_of_estimation_ / ctl.solver().dt());
+  past_foot_pose_[Foot::Left] = Circular_Buffer<sva::PTransformd>(delay_of_estimation_ / ctl.solver().dt());
+
   // Subscriber for the range sensors
   right_foot_range_sensor_sub_ = mc_rtc::ROSBridge::get_node_handle()->subscribe("right_range_sensor/distance", 1, &SoftFootState::rightFRSCallback, this);
   left_foot_range_sensor_sub_ = mc_rtc::ROSBridge::get_node_handle()->subscribe("left_range_sensor/distance", 1, &SoftFootState::leftFRSCallback, this);
@@ -241,6 +280,12 @@ void SoftFootState::runState()
   // Compute cost
   calculateCost(ctl);
 
+  // Get the current moving foot
+  Foot current_moving_foot = getCurrentMovingFoot(ctl);
+
+  // Estimate ground from sensors
+  estimateGround(ctl, current_moving_foot);
+
   // Check if we are in single support or not
   if(ctl.stabilizer_->inDoubleSupport())
   {
@@ -248,9 +293,6 @@ void SoftFootState::runState()
     foot_data_[Foot::Left].need_reset = true;
     return;
   }
-
-  // Get the current moving foot
-  Foot current_moving_foot = getCurrentMovingFoot(ctl);
 
   // Scope to handle reset/GUI
   {
@@ -342,9 +384,6 @@ void SoftFootState::runState()
       );
     }
   }
-
-  // Estimate ground from sensors
-  estimateGround(ctl, current_moving_foot);
 
   // Check foot position with respect to desired landing pose
   const auto & ground = foot_data_[current_moving_foot].ground;
@@ -484,6 +523,8 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
   const std::string& BodyOfSensor = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).parent();
   // Access the position of body name in world coordinates (phalanx position)
   sva::PTransformd X_0_ph = ctl.realRobot().bodyPosW(BodyOfSensor);
+  // Keep in memory the current foot pose
+  past_foot_pose_[current_moving_foot].enqueue(X_0_ph);
   // Returns the transformation from the parent body to the sensor
   const sva::PTransformd& X_ph_s = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).X_p_s();
   // Get the range measured by the sensor
@@ -495,12 +536,20 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
   // mc_rtc::log::error("[SoftFootState] data.range {}", data.range);
   if(range != data.range)
   {
-    data.range = range;
     mc_rtc::log::info("New data acquired by the sensor {}", data.range);
-    const sva::PTransformd X_s_m = sva::PTransformd(Eigen::Vector3d(0, 0, data.range));
-    sva::PTransformd X_0_m = X_s_m*X_ph_s*X_0_ph;
-    // Keep the estimated 3d point for the ground
-    data.ground.push_back(X_0_m.translation());
+    if(past_foot_pose_[current_moving_foot].is_full())
+    {
+      mc_rtc::log::info("past_foot_pose is full and has a delay of {} [s]", delay_of_estimation_);
+      data.range = range;
+      const sva::PTransformd X_s_m = sva::PTransformd(Eigen::Vector3d(0, 0, data.range));
+      if(past_foot_pose_[current_moving_foot].is_full())
+      {
+        X_0_ph = past_foot_pose_[current_moving_foot].dequeue();
+      }
+      sva::PTransformd X_0_m = X_s_m * X_ph_s * X_0_ph;
+      // Keep the estimated 3d point for the ground
+      data.ground.push_back(X_0_m.translation());
+    }
   }
 }
 

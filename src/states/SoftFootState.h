@@ -7,6 +7,104 @@
 #include <std_msgs/Float64.h>
 #include <mutex>
 
+
+// https://gist.github.com/edwintcloud/d547a4f9ccaf7245b06f0e8782acefaa
+//===================================================================
+// File: circular_buffer.cpp
+//
+// Desc: A Circular Buffer implementation in C++.
+//
+// Copyright © 2019 Edwin Cloud. All rights reserved.
+//
+//===================================================================
+
+//-------------------------------------------------------------------
+// Includes
+//-------------------------------------------------------------------
+#include <memory>
+
+//-------------------------------------------------------------------
+// Circular_Buffer (Class)
+//     We will implement the buffer with a templated class so
+//     the buffer can be a buffer of specified type.
+//-------------------------------------------------------------------
+template <class T> class Circular_Buffer {
+private:
+  //---------------------------------------------------------------
+  // Circular_Buffer - Private Member Variables
+  //---------------------------------------------------------------
+
+  std::shared_ptr<T[]> buffer; // using a smart pointer is safer (and we don't
+                               // have to implement a destructor)
+  size_t head = 0;             // size_t is an unsigned long
+  size_t tail = 0;
+  size_t max_size;
+  T empty_item; // we will use this to clear data
+public:
+  //---------------------------------------------------------------
+  // Circular_Buffer - Public Methods
+  //---------------------------------------------------------------
+  Circular_Buffer<T>() {}
+
+  // Create a new Circular_Buffer.
+  Circular_Buffer<T>(size_t max_size)
+      : buffer(std::shared_ptr<T[]>(new T[max_size])), max_size(max_size){};
+
+  // Add an item to this circular buffer.
+  void enqueue(T item) {
+    // if buffer is full, throw an error
+    if (is_full())
+    {
+      dequeue();
+    }
+
+    // insert item at back of buffer
+    buffer[tail] = item;
+
+    // increment tail
+    tail = (tail + 1) % max_size;
+  }
+
+  // Remove an item from this circular buffer and return it.
+  T dequeue() {
+
+    // if buffer is empty, throw an error
+    if (is_empty() && max_size != 1)
+    {
+      return sva::PTransformd();
+    }
+
+    // get item at head
+    T item = buffer[head];
+
+    // set item at head to be empty
+    T empty;
+    buffer[head] = empty_item;
+
+    // move head foward
+    head = (head + 1) % max_size;
+
+    // return item
+    return item;
+  }
+
+  // Return the item at the front of this circular buffer.
+  T front() { return buffer[head]; }
+
+  // Return true if this circular buffer is empty, and false otherwise.
+  bool is_empty() { return head == tail; }
+
+  // Return true if this circular buffer is full, and false otherwise.
+  bool is_full() { return tail == (head - 1) % max_size; }
+
+  // Return the size of this circular buffer.
+  size_t size() {
+    if (tail >= head)
+      return tail - head;
+    return max_size - head - tail;
+  }
+};
+
 namespace lipm_walking::states
 {
 
@@ -18,6 +116,8 @@ enum class Foot
   //! Right foot
   Right
 };
+
+
 
 
 /** \brief FSM state to calculate ground profile and calculate sole stiffness online. */
@@ -138,10 +238,14 @@ protected:
     {Foot::Right, "RightFootCenter"}
   };
 
+  // Keep preivous poses for ground estimation
+  double delay_of_estimation_ = 0.005;
+  std::unordered_map<Foot, Circular_Buffer<sva::PTransformd>> past_foot_pose_;
+
   // TODO: Ugly hardcoded value
   // double foot_length_ = 0.27742;
-  double foot_length_ = 0.21742;
-  double landing_to_foot_middle_offset_ = 0.0358;
+  double foot_length_ = 0.34742;
+  double landing_to_foot_middle_offset_ = 0.0328;
   size_t nr_phalanxes_;
   double phalanx_length_;
   double time_ = 0.; // controller time
@@ -165,6 +269,7 @@ protected:
   void leftFRSCallback(const std_msgs::Float64::ConstPtr& data);
 
   std::mutex range_sensor_mutex_;
+
 };
 
 } // namespace lipm_walking::states
