@@ -236,6 +236,7 @@ void SoftFootState::runState()
 
   // Cast ctl to BaselineWalkingController
   auto & ctl = controller();
+  time_ += ctl.solver().dt();
 
   // Compute cost
   calculateCost(ctl);
@@ -337,7 +338,7 @@ void SoftFootState::runState()
     // Continue only if we have enough data such as the foot is smaller than the estimated ground
     if(!ground_segment_[current_moving_foot].raw.empty())
     {
-      if(ground_segment_[current_moving_foot].raw.back().x() - ground_segment_[current_moving_foot].raw.front().x() > 0.65 * foot_length_)
+      if(ground_segment_[current_moving_foot].raw.back().x() - ground_segment_[current_moving_foot].raw.front().x() > 0.25 * foot_length_)
       {
         // Compute the altitude profile
         extractAltitudeProfileFromGroundSegment(current_moving_foot);
@@ -462,16 +463,22 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
   sva::PTransformd X_0_ph = ctl.realRobot().bodyPosW(BodyOfSensor);
   // Returns the transformation from the parent body to the sensor
   const sva::PTransformd& X_ph_s = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).X_p_s();
-  // Sensor position in global frame Z coordinate
+  // Get the range measured by the sensor
+  double range = 0.;
   {
     const std::lock_guard<std::mutex> lock(range_sensor_mutex_);
-    data.range = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).data();
+    range = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).data();
   }
   // mc_rtc::log::error("[SoftFootState] data.range {}", data.range);
-  const sva::PTransformd X_s_m = sva::PTransformd(Eigen::Vector3d(0, 0, data.range));
-  sva::PTransformd X_0_m = X_s_m*X_ph_s*X_0_ph;
-  // Keep the estimated 3d point for the ground
-  data.ground.push_back(X_0_m.translation());
+  if(range != data.range)
+  {
+    data.range = range;
+    mc_rtc::log::info("New data acquired by the sensor {}", data.range);
+    const sva::PTransformd X_s_m = sva::PTransformd(Eigen::Vector3d(0, 0, data.range));
+    sva::PTransformd X_0_m = X_s_m*X_ph_s*X_0_ph;
+    // Keep the estimated 3d point for the ground
+    data.ground.push_back(X_0_m.translation());
+  }
 }
 
 void SoftFootState::extractGroundSegment(mc_control::fsm::Controller & ctl, const Foot & current_moving_foot, const Eigen::Vector3d & landing)
@@ -1429,7 +1436,7 @@ void SoftFootState::rightFRSCallback(const std_msgs::Float64::ConstPtr& data)
   // Select data/string based on current_moving_foot
   const std::string sensor_name = range_sensor_name_[Foot::Right];
   const std::lock_guard<std::mutex> lock(range_sensor_mutex_);
-  controller().robot().device<mc_mujoco::RangeSensor>(sensor_name).update(data->data * 0.001);
+  controller().robot().device<mc_mujoco::RangeSensor>(sensor_name).update(data->data * 0.001, time_);
 }
 
 void SoftFootState::leftFRSCallback(const std_msgs::Float64::ConstPtr& data)
@@ -1437,7 +1444,7 @@ void SoftFootState::leftFRSCallback(const std_msgs::Float64::ConstPtr& data)
   // Select data/string based on current_moving_foot
   const std::string sensor_name = range_sensor_name_[Foot::Left];
   const std::lock_guard<std::mutex> lock(range_sensor_mutex_);
-  controller().robot().device<mc_mujoco::RangeSensor>(sensor_name).update(data->data * 0.001);
+  controller().robot().device<mc_mujoco::RangeSensor>(sensor_name).update(data->data * 0.001, time_);
 }
 
 } // namespace lipm_walking

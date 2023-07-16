@@ -74,6 +74,7 @@ protected:
   clock::time_point prev_time_;
   duration_ms time_since_last_received_{0}; // time between two successful reading
   double timeout_ = 1000; // timeout in ms
+  double t_ = 0.; // controller time
 };
 
 } /* lipm_walking */

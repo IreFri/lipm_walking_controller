@@ -260,9 +260,10 @@ bool RangeSensor::run(const mc_control::MCController &)
 
 void RangeSensor::update(mc_control::MCController & ctl)
 {
+  t_ += ctl.solver().dt();
   if(serial_port_is_open_)
   {
-    ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).update(sensor_data_);
+    ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).update(sensor_data_, t_);
   }
 }
 
@@ -371,7 +372,7 @@ void RangeSensor::addToGUI(const mc_control::MCController & ctl,
 
   gui.addPlot(
     fmt::format("RangeSensor::{}", name_),
-    mc_rtc::gui::plot::X("t", [this, &ctl]() { static double t = 0.; return t += ctl.solver().dt(); }),
+    mc_rtc::gui::plot::X("t", [this, &ctl]() { return t_; }),
     mc_rtc::gui::plot::Y( "data", [this]() { return sensor_data_.load(); }, mc_rtc::gui::Color::Red)
   );
 }

@@ -144,6 +144,7 @@ protected:
   double landing_to_foot_middle_offset_ = 0.0358;
   size_t nr_phalanxes_;
   double phalanx_length_;
+  double time_ = 0.; // controller time
 
   // Reset data
   void reset(mc_control::fsm::Controller & ctl, const Foot & foot);
