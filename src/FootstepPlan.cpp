@@ -126,7 +126,6 @@ void FootstepPlan::reset(unsigned startIndex)
 void FootstepPlan::updateTargetContact(const sva::PTransformd & targetContactPose)
 {
   targetContact_.pose = targetContactPose;
-  std::cout << "Update " << targetContact_.surfaceName << " " << contacts_[nextFootstep_ - 1].surfaceName << std::endl;
   contacts_[nextFootstep_ - 1].pose = targetContactPose;
 }
 

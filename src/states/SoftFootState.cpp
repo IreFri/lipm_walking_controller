@@ -265,6 +265,10 @@ void SoftFootState::runState()
     {
       // Handle logger and gui
       ctl.logger().addLogEntry("MyMeasures_" + name + "_ground", [this, foot]() { return foot_data_[foot].ground.back();} );
+      ctl.logger().addLogEntry("MyMeasures_" + name + "_back_foot_x", [this, foot]() { return controller().targetContact().pose.translation().x() + landing_to_foot_middle_offset_ - foot_length_ * 0.5;} );
+      ctl.logger().addLogEntry("MyMeasures_" + name + "_front_foot_x", [this, foot]() { return controller().targetContact().pose.translation().x() + landing_to_foot_middle_offset_ + foot_length_ * 0.5;} );
+      ctl.logger().addLogEntry("MyMeasures_" + name + "_back_foot_z", [this, foot]() { return controller().targetContact().pose.translation().z();} );
+      ctl.logger().addLogEntry("MyMeasures_" + name + "_front_foot_z", [this, foot]() { return controller().targetContact().pose.translation().z();} );
       ctl.logger().addLogEntry("MyMeasures_" + name + "_filtered_x", [this, foot]()
         {
           std::vector<double> d;
@@ -317,6 +321,25 @@ void SoftFootState::runState()
         mc_rtc::gui::Point3D(name + "_point_ground", {mc_rtc::gui::Color::Green}, [this, foot](){ return foot_data_[foot].ground.back(); }),
         mc_rtc::gui::Trajectory(name + "_ground", {mc_rtc::gui::Color::Green}, [this, foot]() { return foot_data_[foot].ground; })
       );
+
+      ctl.gui()->addElement({"SoftFoot"},
+        mc_rtc::gui::Point3D(name + "_front_foot", {mc_rtc::gui::Color::Red},
+          [this, foot]()
+          {
+            const auto & X_0_p = controller().robot().surfacePose(surface_name_[foot]);
+            auto p = X_0_p.translation();
+            p.x() += landing_to_foot_middle_offset_ + foot_length_ * 0.5;
+            return p;
+          }),
+        mc_rtc::gui::Point3D(name + "_back_foot", {mc_rtc::gui::Color::Red},
+          [this, foot]()
+          {
+            const auto & X_0_p = controller().robot().surfacePose(surface_name_[foot]);
+            auto p = X_0_p.translation();
+            p.x() += landing_to_foot_middle_offset_ - foot_length_ * 0.5;
+            return p;
+          })
+      );
     }
   }
 
@@ -328,7 +351,7 @@ void SoftFootState::runState()
   // TODO: Get landing: a bit dirty for the moment
   sva::PTransformd X_0_landing = ctl.targetContact().pose;
   // If we saw more than the landing pose + half of the foot, we have enough data to perform all the computations
-  if(!foot_data_[current_moving_foot].computation_done && ground.back().x() >= X_0_landing.translation().x() + landing_to_foot_middle_offset_ + foot_length_ * 0.65 + extra_to_compute_best_position_)
+  if(!foot_data_[current_moving_foot].computation_done && ground.back().x() >= X_0_landing.translation().x() + landing_to_foot_middle_offset_ + foot_length_ * 0.5 + extra_to_compute_best_position_)
   {
     mc_rtc::log::success("Accumulated enough data for {}", current_moving_foot == Foot::Right ? "right foot" : "left foot");
     // We need to do these steps only one time
@@ -1378,8 +1401,15 @@ void SoftFootState::reset(mc_control::fsm::Controller & ctl, const Foot & foot)
 
   // Delete all the data that are behind the foot
   const auto X_0_p = ctl.robot().surfacePose(surface_name_[foot]);
+  // Before to do so, we need to sort ground as it is unsorted and the elements order are time-based
   auto & ground = foot_data_[foot].ground;
-  const auto ground_iterator = std::find_if(ground.begin(), ground.end(), [&](const Eigen::Vector3d & v) { return v.x() >= X_0_p.translation().x() + landing_to_foot_middle_offset_ - 0.65 * foot_length_ - extra_to_compute_best_position_; });
+  std::sort(ground.begin(), ground.end(),
+    [](const Eigen::Vector3d & a, const Eigen::Vector3d & b)
+    {
+      return a.x() < b.x();
+    }
+  );
+  const auto ground_iterator = std::find_if(ground.begin(), ground.end(), [&](const Eigen::Vector3d & v) { return v.x() >= X_0_p.translation().x() + landing_to_foot_middle_offset_ - 0.5 * foot_length_ - extra_to_compute_best_position_; });
   // Delete from the beginning of the vector up to the back part of the foot
   ground.erase(ground.begin(), ground_iterator);
 
@@ -1399,6 +1429,10 @@ void SoftFootState::reset(mc_control::fsm::Controller & ctl, const Foot & foot)
   // Reset logger
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_range");
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_ground");
+  ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_back_foot_x");
+  ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_front_foot_x");
+  ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_back_foot_z");
+  ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_front_foot_z");
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_filtered_x");
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_convex_x");
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_filtered_y");
@@ -1415,6 +1449,8 @@ void SoftFootState::reset(mc_control::fsm::Controller & ctl, const Foot & foot)
   // Reset GUI
   ctl.gui()->removeElement({"SoftFoot"}, other_name + "_point_ground");
   ctl.gui()->removeElement({"SoftFoot"}, other_name + "_ground");
+  ctl.gui()->removeElement({"SoftFoot"}, other_name + "_back_foot");
+  ctl.gui()->removeElement({"SoftFoot"}, other_name + "_front_foot");
 
   ctl.gui()->removeElement({"SoftFoot"}, other_name + "_segment");
   ctl.gui()->removeElement({"SoftFoot"}, name + "_segment");
@@ -1427,8 +1463,6 @@ void SoftFootState::reset(mc_control::fsm::Controller & ctl, const Foot & foot)
 
   ctl.gui()->removeElement({"SoftFoot"}, other_name + "_convex_display");
   ctl.gui()->removeElement({"SoftFoot"}, name + "_convex_display");
-
-  // Reset log
 }
 
 void SoftFootState::rightFRSCallback(const std_msgs::Float64::ConstPtr& data)
