@@ -537,10 +537,10 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
   if(range != data.range)
   {
     mc_rtc::log::info("New data acquired by the sensor {}", data.range);
+    data.range = range;
     if(past_foot_pose_[current_moving_foot].is_full())
     {
       mc_rtc::log::info("past_foot_pose is full and has a delay of {} [s]", delay_of_estimation_);
-      data.range = range;
       const sva::PTransformd X_s_m = sva::PTransformd(Eigen::Vector3d(0, 0, data.range));
       if(past_foot_pose_[current_moving_foot].is_full())
       {
