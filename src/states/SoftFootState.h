@@ -6,103 +6,105 @@
 #include <ros/ros.h>
 #include <std_msgs/Float64.h>
 #include <mutex>
-
-
-// https://gist.github.com/edwintcloud/d547a4f9ccaf7245b06f0e8782acefaa
-//===================================================================
-// File: circular_buffer.cpp
-//
-// Desc: A Circular Buffer implementation in C++.
-//
-// Copyright © 2019 Edwin Cloud. All rights reserved.
-//
-//===================================================================
-
-//-------------------------------------------------------------------
-// Includes
-//-------------------------------------------------------------------
 #include <memory>
 
-//-------------------------------------------------------------------
-// Circular_Buffer (Class)
-//     We will implement the buffer with a templated class so
-//     the buffer can be a buffer of specified type.
-//-------------------------------------------------------------------
-template <class T> class Circular_Buffer {
-private:
-  //---------------------------------------------------------------
-  // Circular_Buffer - Private Member Variables
-  //---------------------------------------------------------------
 
-  std::shared_ptr<T[]> buffer; // using a smart pointer is safer (and we don't
-                               // have to implement a destructor)
-  size_t head = 0;             // size_t is an unsigned long
-  size_t tail = 0;
-  size_t max_size;
-  T empty_item; // we will use this to clear data
+// https://github.com/embeddedartistry/embedded-resources/blob/master/examples/cpp/circular_buffer.cpp
+template<class T>
+class Circular_Buffer
+{
 public:
-  //---------------------------------------------------------------
-  // Circular_Buffer - Public Methods
-  //---------------------------------------------------------------
-  Circular_Buffer<T>() {}
+	Circular_Buffer() = default;
 
-  // Create a new Circular_Buffer.
-  Circular_Buffer<T>(size_t max_size)
-      : buffer(std::shared_ptr<T[]>(new T[max_size])), max_size(max_size){};
+  Circular_Buffer(size_t max_size)
+  : TElemCount(max_size),
+    buf_(TElemCount)
+  {}
 
-  // Add an item to this circular buffer.
-  void enqueue(T item) {
-    // if buffer is full, throw an error
-    if (is_full())
-    {
-      dequeue();
-    }
+	void enqueue(T item) noexcept
+	{
+		buf_[head_] = item;
 
-    // insert item at back of buffer
-    buffer[tail] = item;
+		if(full_)
+		{
+			tail_ = (tail_ + 1) % TElemCount;
+		}
 
-    // increment tail
-    tail = (tail + 1) % max_size;
-  }
+		head_ = (head_ + 1) % TElemCount;
 
-  // Remove an item from this circular buffer and return it.
-  T dequeue() {
+		full_ = head_ == tail_;
+	}
 
-    // if buffer is empty, throw an error
-    if (is_empty() && max_size != 1)
-    {
-      return sva::PTransformd();
-    }
+	std::optional<T> dequeue() const noexcept
+	{
+		if(empty())
+		{
+			return std::nullopt;
+		}
 
-    // get item at head
-    T item = buffer[head];
+		// Read data and advance the tail (we now have a free space)
+		auto val = buf_[tail_];
+		full_ = false;
+		tail_ = (tail_ + 1) % TElemCount;
 
-    // set item at head to be empty
-    T empty;
-    buffer[head] = empty_item;
+		return val;
+	}
 
-    // move head foward
-    head = (head + 1) % max_size;
+	void reset() noexcept
+	{
+		head_ = tail_;
+		full_ = false;
+	}
 
-    // return item
-    return item;
-  }
+  void resize(size_t new_size) noexcept
+	{
+    TElemCount = new_size;
+    buf_ = std::vector<T>(TElemCount);
+    reset();
+	}
 
-  // Return the item at the front of this circular buffer.
-  T front() { return buffer[head]; }
+	bool empty() const noexcept
+	{
+		// if head and tail are equal, we are empty
+		return (!full_ && (head_ == tail_));
+	}
 
-  // Return true if this circular buffer is empty, and false otherwise.
-  bool is_empty() { return head == tail; }
+	bool full() const noexcept
+	{
+		// If tail is ahead the head by 1, we are full
+		return full_;
+	}
 
-  // Return true if this circular buffer is full, and false otherwise.
-  bool is_full() { return tail == (head - 1) % max_size; }
+	size_t capacity() const noexcept
+	{
+		return TElemCount;
+	}
 
-  // Return the size of this circular buffer.
-  size_t size() {
-    if (tail >= head)
-      return tail - head;
-    return max_size - head - tail;
-  }
+	size_t size() const noexcept
+	{
+		size_t size = TElemCount;
+
+		if(!full_)
+		{
+			if(head_ >= tail_)
+			{
+				size = head_ - tail_;
+			}
+			else
+			{
+				size = TElemCount + head_ - tail_;
+			}
+		}
+
+		return size;
+	}
+
+private:
+  mutable size_t TElemCount;
+	mutable std::vector<T> buf_;
+	mutable size_t head_ = 0;
+	mutable size_t tail_ = 0;
+	mutable bool full_ = 0;
 };
 
 namespace lipm_walking::states

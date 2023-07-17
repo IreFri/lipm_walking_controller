@@ -507,6 +507,7 @@ void RangeSensor::startReadingDevice()
           {
             const double data = std::stod(str);
             if(data != 255.)
+            if(data <= 255 && data >= 25)
             {
               sensor_data_ = data * 0.001;
               if(debug_.load())
