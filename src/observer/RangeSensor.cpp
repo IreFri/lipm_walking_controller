@@ -357,6 +357,49 @@ void RangeSensor::addToGUI(const mc_control::MCController & ctl,
           mc_rtc::log::warning("[RangeSensor::{}] The device is already closed", name_);
         }
       }),
+    mc_rtc::gui::Transform(fmt::format("X_0_{}", name_),
+      [this, &ctl]()
+      {
+        const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(range_sensor_name_).parent();
+        const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
+        return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s() * X_0_p;
+      }),
+    mc_rtc::gui::ArrayInput("Rotation [deg]", {"r", "p", "y"},
+      [this, &ctl]() -> Eigen::Vector3d
+      {
+        return mc_rbdyn::rpyFromMat(ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s().rotation()).unaryExpr([](double x){return x * 180. / M_PI;});
+      },
+      [this, &ctl](const Eigen::Vector3d & new_rpy)
+      {
+        const sva::PTransformd current_X_p_s = ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s();
+        const sva::PTransformd new_X_p_s(mc_rbdyn::rpyToMat(new_rpy.unaryExpr([](double x){return x * M_PI / 180.;})), current_X_p_s.translation());
+        const_cast<mc_control::MCController &>(ctl).robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s(new_X_p_s);
+      }),
+    mc_rtc::gui::ArrayInput("Translation", {"x", "y", "z"},
+      [this, &ctl]()
+      {
+        return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s().translation();
+      },
+      [this, &ctl](const Eigen::Vector3d & new_translation)
+      {
+        const sva::PTransformd current_X_p_s = ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s();
+        const sva::PTransformd new_X_p_s(current_X_p_s.rotation(), new_translation);
+        const_cast<mc_control::MCController &>(ctl).robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s(new_X_p_s);
+      }),
+    mc_rtc::gui::Transform("X_p_s",
+      [this, &ctl]()
+      {
+        const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(range_sensor_name_).parent();
+        const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
+        return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s() * X_0_p;
+      },
+      [this, &ctl](const sva::PTransformd & X_0_s)
+      {
+        const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(range_sensor_name_).parent();
+        const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
+        const sva::PTransformd new_X_p_s = X_0_s * X_0_p.inv();
+        const_cast<mc_control::MCController &>(ctl).robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s(new_X_p_s);
+      }),
     mc_rtc::gui::Checkbox("Debug output", [this]() { return debug_.load(); }, [this]() { debug_ = !debug_.load(); }),
     mc_rtc::gui::Label("Data",
       [this]()
