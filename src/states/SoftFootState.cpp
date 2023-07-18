@@ -1587,7 +1587,10 @@ void SoftFootState::reset(mc_control::fsm::Controller & ctl, const Foot & foot)
   );
   const auto ground_iterator = std::find_if(ground.begin(), ground.end(), [&](const Eigen::Vector3d & v) { return v.x() >= X_0_p.translation().x() + landing_to_foot_middle_offset_ - 0.5 * foot_length_ - extra_to_compute_best_position_; });
   // Delete from the beginning of the vector up to the back part of the foot
-  ground.erase(ground.begin(), ground_iterator);
+  if(ground_iterator != ground.begin())
+  {
+    ground.erase(ground.begin(), ground_iterator);
+  }
 
   // Reset altitude
   foot_data_[foot].altitude.clear();
