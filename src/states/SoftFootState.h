@@ -241,9 +241,9 @@ protected:
   };
 
   // Keep preivous poses for ground estimation
-  double delay_of_estimation_ = 0.005;
-  bool use_constant_delay_of_estimation_ = true;
-  std::unordered_map<Foot, Circular_Buffer<sva::PTransformd>> past_foot_pose_;
+  // double delay_of_estimation_ = 0.005;
+  // bool use_constant_delay_of_estimation_ = true;
+  // std::unordered_map<Foot, Circular_Buffer<sva::PTransformd>> past_foot_pose_;
 
   // TODO: Ugly hardcoded value
   // double foot_length_ = 0.27742;

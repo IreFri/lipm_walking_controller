@@ -118,25 +118,25 @@ void SoftFootState::start()
   ctl.gui()->addElement({"SoftFoot", "Config"},
     mc_rtc::gui::Checkbox("With variable stiffness", [this]() { return with_variable_stiffness_; }, [this]() { with_variable_stiffness_ = !with_variable_stiffness_; }),
     mc_rtc::gui::Checkbox("With ankle rotation", [this]() { return with_ankle_rotation_; }, [this]() { with_ankle_rotation_ = !with_ankle_rotation_; }),
-    mc_rtc::gui::Checkbox("With position adjustment", [this]() { return with_foot_adjustment_; }, [this]() { with_foot_adjustment_ = !with_foot_adjustment_; }),
-    mc_rtc::gui::Checkbox("Use constant delay for estimation", [this]() { return use_constant_delay_of_estimation_; }, [this]() { use_constant_delay_of_estimation_ = !use_constant_delay_of_estimation_; }),
-    mc_rtc::gui::NumberInput("Delay of estimation [s]",
-      [this]() { return delay_of_estimation_; },
-      [this, &ctl](double delay_of_estimation)
-      {
-        if(delay_of_estimation_ < ctl.solver().dt())
-        {
-          mc_rtc::log::error("[SoftFootState] Delay of estimation has to be superior or equal to {} [s]", ctl.solver().dt());
-          return;
-        }
-        delay_of_estimation_ = delay_of_estimation;
-        //
-        const size_t new_size = delay_of_estimation_ / ctl.solver().dt();
+    mc_rtc::gui::Checkbox("With position adjustment", [this]() { return with_foot_adjustment_; }, [this]() { with_foot_adjustment_ = !with_foot_adjustment_; })
+  //   mc_rtc::gui::Checkbox("Use constant delay for estimation", [this]() { return use_constant_delay_of_estimation_; }, [this]() { use_constant_delay_of_estimation_ = !use_constant_delay_of_estimation_; }),
+  //   mc_rtc::gui::NumberInput("Delay of estimation [s]",
+  //     [this]() { return delay_of_estimation_; },
+  //     [this, &ctl](double delay_of_estimation)
+  //     {
+  //       if(delay_of_estimation_ < ctl.solver().dt())
+  //       {
+  //         mc_rtc::log::error("[SoftFootState] Delay of estimation has to be superior or equal to {} [s]", ctl.solver().dt());
+  //         return;
+  //       }
+  //       delay_of_estimation_ = delay_of_estimation;
+  //       //
+  //       const size_t new_size = delay_of_estimation_ / ctl.solver().dt();
 
-        past_foot_pose_[Foot::Right].resize(new_size);
-        past_foot_pose_[Foot::Left].resize(new_size);
+  //       past_foot_pose_[Foot::Right].resize(new_size);
+  //       past_foot_pose_[Foot::Left].resize(new_size);
 
-      })
+  //     })
   );
 
   ctl.gui()->addXYPlot(
@@ -252,8 +252,8 @@ void SoftFootState::start()
   );
 
   //
-  past_foot_pose_[Foot::Right] = Circular_Buffer<sva::PTransformd>(delay_of_estimation_ / ctl.solver().dt());
-  past_foot_pose_[Foot::Left] = Circular_Buffer<sva::PTransformd>(delay_of_estimation_ / ctl.solver().dt());
+  // past_foot_pose_[Foot::Right] = Circular_Buffer<sva::PTransformd>(delay_of_estimation_ / ctl.solver().dt());
+  // past_foot_pose_[Foot::Left] = Circular_Buffer<sva::PTransformd>(delay_of_estimation_ / ctl.solver().dt());
 
   // Subscriber for the range sensors
   right_foot_range_sensor_sub_ = mc_rtc::ROSBridge::get_node_handle()->subscribe("right_range_sensor/distance", 1, &SoftFootState::rightFRSCallback, this);
@@ -569,9 +569,9 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
   const std::string& BodyOfSensor = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).parent();
   // Access the position of body name in world coordinates (phalanx position)
   sva::PTransformd X_0_ph = ctl.realRobot().bodyPosW(BodyOfSensor);
-  bool X_0_ph_updated = false;
+  // bool X_0_ph_updated = false;
   // Keep in memory the current foot pose
-  past_foot_pose_[current_moving_foot].enqueue(X_0_ph);
+  // past_foot_pose_[current_moving_foot].enqueue(X_0_ph);
   // Returns the transformation from the parent body to the sensor
   const sva::PTransformd& X_ph_s = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).X_p_s();
   // Get the range measured by the sensor
@@ -588,76 +588,76 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
     if(!controller().stabilizer_->inDoubleSupport())
     {
       mc_rtc::log::info("New data acquired by the sensor {}", data.range);
-      mc_rtc::log::info("past_foot_pose has a size of {}", past_foot_pose_[current_moving_foot].size());
+      // mc_rtc::log::info("past_foot_pose has a size of {}", past_foot_pose_[current_moving_foot].size());
     }
 
     data.range = range;
     const sva::PTransformd X_s_m = sva::PTransformd(Eigen::Vector3d(0, 0, data.range));
 
-    if(use_constant_delay_of_estimation_ && past_foot_pose_[current_moving_foot].full())
-    {
-      if(!controller().stabilizer_->inDoubleSupport())
-      {
-        mc_rtc::log::info("past_foot_pose is full and has a delay of {} [s] and a size of {}", delay_of_estimation_, past_foot_pose_[current_moving_foot].size());
-      }
-      auto optionnal_X_0_ph = past_foot_pose_[current_moving_foot].dequeue();
-      if(optionnal_X_0_ph.has_value())
-      {
-        X_0_ph = optionnal_X_0_ph.value();
-        X_0_ph_updated = true;
-      }
-      else
-      {
-        mc_rtc::log::error("[SoftFootState] optionnal_X_0_ph is empty; it should not happen");
-        return;
-      }
-    }
-    else if(!use_constant_delay_of_estimation_)
-    {
-      // The acquisition time is acquisition_time
-      // We try to match the range data with a past body pose
-      const size_t iterations = acquisition_time / ctl.solver().dt();
-      if(!controller().stabilizer_->inDoubleSupport())
-      {
-        mc_rtc::log::error("iterations {} for time {}", iterations, acquisition_time);
-      }
-      if(iterations <= past_foot_pose_[current_moving_foot].size())
-      {
-        const size_t n_to_remove = past_foot_pose_[current_moving_foot].size() - iterations;
-        if(!controller().stabilizer_->inDoubleSupport())
-        {
-          mc_rtc::log::error("n_to_remove {} for past_foot_pose_[current_moving_foot].size() {}", n_to_remove, past_foot_pose_[current_moving_foot].size());
-        }
-        for(size_t i = 0; i < n_to_remove; ++i)
-        {
-          past_foot_pose_[current_moving_foot].dequeue();
-        }
-        auto optionnal_X_0_ph = past_foot_pose_[current_moving_foot].dequeue();
-        if(optionnal_X_0_ph.has_value())
-        {
-          X_0_ph = optionnal_X_0_ph.value();
-          X_0_ph_updated = true;
-        }
-        else
-        {
-          mc_rtc::log::error("[SoftFootState] optionnal_X_0_ph is empty; it should not happen");
-          return;
-        }
-      }
-    }
-    else if(use_constant_delay_of_estimation_)
-    {
-      if(!controller().stabilizer_->inDoubleSupport())
-      {
-        mc_rtc::log::warning("[SoftFootState] Not enough data in the circular buffer");
-        return;
-      }
-    }
+    // if(use_constant_delay_of_estimation_ && past_foot_pose_[current_moving_foot].full())
+    // {
+    //   if(!controller().stabilizer_->inDoubleSupport())
+    //   {
+    //     mc_rtc::log::info("past_foot_pose is full and has a delay of {} [s] and a size of {}", delay_of_estimation_, past_foot_pose_[current_moving_foot].size());
+    //   }
+    //   auto optionnal_X_0_ph = past_foot_pose_[current_moving_foot].dequeue();
+    //   if(optionnal_X_0_ph.has_value())
+    //   {
+    //     X_0_ph = optionnal_X_0_ph.value();
+    //     X_0_ph_updated = true;
+    //   }
+    //   else
+    //   {
+    //     mc_rtc::log::error("[SoftFootState] optionnal_X_0_ph is empty; it should not happen");
+    //     return;
+    //   }
+    // }
+    // else if(!use_constant_delay_of_estimation_)
+    // {
+    //   // The acquisition time is acquisition_time
+    //   // We try to match the range data with a past body pose
+    //   const size_t iterations = acquisition_time / ctl.solver().dt();
+    //   if(!controller().stabilizer_->inDoubleSupport())
+    //   {
+    //     mc_rtc::log::error("iterations {} for time {}", iterations, acquisition_time);
+    //   }
+    //   if(iterations <= past_foot_pose_[current_moving_foot].size())
+    //   {
+    //     const size_t n_to_remove = past_foot_pose_[current_moving_foot].size() - iterations;
+    //     if(!controller().stabilizer_->inDoubleSupport())
+    //     {
+    //       mc_rtc::log::error("n_to_remove {} for past_foot_pose_[current_moving_foot].size() {}", n_to_remove, past_foot_pose_[current_moving_foot].size());
+    //     }
+    //     for(size_t i = 0; i < n_to_remove; ++i)
+    //     {
+    //       past_foot_pose_[current_moving_foot].dequeue();
+    //     }
+    //     auto optionnal_X_0_ph = past_foot_pose_[current_moving_foot].dequeue();
+    //     if(optionnal_X_0_ph.has_value())
+    //     {
+    //       X_0_ph = optionnal_X_0_ph.value();
+    //       X_0_ph_updated = true;
+    //     }
+    //     else
+    //     {
+    //       mc_rtc::log::error("[SoftFootState] optionnal_X_0_ph is empty; it should not happen");
+    //       return;
+    //     }
+    //   }
+    // }
+    // else if(use_constant_delay_of_estimation_)
+    // {
+    //   if(!controller().stabilizer_->inDoubleSupport())
+    //   {
+    //     mc_rtc::log::warning("[SoftFootState] Not enough data in the circular buffer");
+    //     return;
+    //   }
+    // }
 
-    if(!X_0_ph_updated)
-    {
-      return;
-    }
+    // if(!X_0_ph_updated)
+    // {
+    //   return;
+    // }
 
     if(!controller().stabilizer_->inDoubleSupport())
     {
