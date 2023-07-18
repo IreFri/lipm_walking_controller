@@ -269,7 +269,7 @@ void SoftFootState::runState()
   time_ += ctl.solver().dt();
 
   // Compute cost
-  calculateCost(ctl);
+  // calculateCost(ctl);
 
   // Get the current moving foot
   Foot current_moving_foot = getCurrentMovingFoot(ctl);
@@ -667,21 +667,28 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
     // Keep the estimated 3d point for the ground
     sva::PTransformd X_0_m = X_s_m * X_ph_s * X_0_ph;
     data.ground.push_back(X_0_m.translation());
+
+    mc_rtc::log::info("ground {}", data.ground.size());
+    std::sort(data.ground.begin(), data.ground.end(),
+      [](const Eigen::Vector3d & a, const Eigen::Vector3d & b)
+      {
+        return a.x() < b.x();
+      }
+    );
+
+    if(data.ground.size() > 300)
+    {
+      mc_rtc::log::warning("[SoftFootState] ground size for {} foot is superior to 300; we reduce it to 100 by removing the 200 first values.", current_moving_foot == Foot::Left ? "Left" : "Right");
+      data.ground.erase(data.ground.begin(), data.ground.begin() + 100);
+      mc_rtc::log::warning("[SoftFootState] After erasing, the size of ground is {}", data.ground.size());
+    }
   }
 }
 
 void SoftFootState::extractGroundSegment(mc_control::fsm::Controller & ctl, const Foot & current_moving_foot, const Eigen::Vector3d & landing)
 {
   FootData & data = foot_data_[current_moving_foot];
-  // Do a copy to sort the vector
-  std::vector<Eigen::Vector3d> ground = data.ground;
-  // Sort alongside x
-  std::sort(ground.begin(), ground.end(),
-    [](const Eigen::Vector3d & a, const Eigen::Vector3d & b)
-    {
-      return a.x() < b.x();
-    }
-  );
+  const std::vector<Eigen::Vector3d> & ground = data.ground;
 
   // Find beginning and ending of segment to extract
   const auto begin_iterator = std::find_if(ground.begin(), ground.end(),
@@ -1579,12 +1586,7 @@ void SoftFootState::reset(mc_control::fsm::Controller & ctl, const Foot & foot)
   const auto X_0_p = ctl.robot().surfacePose(surface_name_[foot]);
   // Before to do so, we need to sort ground as it is unsorted and the elements order are time-based
   auto & ground = foot_data_[foot].ground;
-  std::sort(ground.begin(), ground.end(),
-    [](const Eigen::Vector3d & a, const Eigen::Vector3d & b)
-    {
-      return a.x() < b.x();
-    }
-  );
+  
   const auto ground_iterator = std::find_if(ground.begin(), ground.end(), [&](const Eigen::Vector3d & v) { return v.x() >= X_0_p.translation().x() + landing_to_foot_middle_offset_ - 0.5 * foot_length_ - extra_to_compute_best_position_; });
   // Delete from the beginning of the vector up to the back part of the foot
   if(ground_iterator != ground.begin())
