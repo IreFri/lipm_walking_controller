@@ -832,6 +832,11 @@ std::vector<Eigen::Vector3d> SoftFootState::computeConvexHull(const std::vector<
 {
   std::vector<Eigen::Vector3d> ret;
 
+  if(data.empty())
+  {
+    mc_rtc::log::error("[SoftFootState::computeConvexHull] data is empty, we can not compute the convex hull ...");
+  }
+
   // Build the input for qhull
   std::vector<double> points_in;
   double min = std::numeric_limits<double>::max();
@@ -1013,6 +1018,12 @@ void SoftFootState::computeFootLandingPosition(const Foot & current_moving_foot,
 
     const std::vector<Eigen::Vector3d> convex = computeConvexHull(ground_under_phalanx);
 
+    if(convex.empty())
+    {
+      mc_rtc::log::error("[SoftFootState::computeFootLandingPosition] convex hull is empty");
+      return 0.;
+    }
+
     const auto start_convex_iterator = std::find_if(convex.begin(), convex.end(), [&](const Eigen::Vector3d & v) { return v.x() >= start.x(); });
     const auto end_convex_iterator = std::find_if(convex.begin(), convex.end(), [&](const Eigen::Vector3d & v) { return v.x() >= end.x(); });
 
@@ -1169,7 +1180,7 @@ void SoftFootState::computeFootLandingPosition(const Foot & current_moving_foot,
         else
         {
           std::cout << "no intersection found" << std::endl;
-          theta_intersection = evaluated_thetas.back();
+          theta_intersection = 0.;
         }
 
         // Update pos
