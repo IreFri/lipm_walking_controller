@@ -12,8 +12,8 @@ int main(int argc, char *argv[])
 
   // SerialPort serialPort("/dev/ttyUSB0", BaudRate::B_115200, NumDataBits::EIGHT, Parity::NONE, NumStopBits::ONE, HardwareFlowControl::OFF, SoftwareFlowControl::OFF);
   // SerialPort serialPort("/dev/ttyUSB0", BaudRate::B_115200, NumDataBits::EIGHT, Parity::NONE, NumStopBits::ONE, HardwareFlowControl::OFF, SoftwareFlowControl::ON);
-  SerialPort serialPort(dev, BaudRate::B_115200, NumDataBits::EIGHT, Parity::NONE, NumStopBits::ONE, HardwareFlowControl::ON, SoftwareFlowControl::OFF);
-  serialPort.SetTimeout(1000); // Block when reading for 1000ms
+  SerialPort serialPort(dev, BaudRate::B_115200, NumDataBits::EIGHT, Parity::NONE, NumStopBits::ONE, HardwareFlowControl::OFF, SoftwareFlowControl::OFF);
+  serialPort.SetTimeout(20);
 
 	serialPort.Open();
 
@@ -24,7 +24,8 @@ int main(int argc, char *argv[])
     std::string readData;
     serialPort.Read(readData);
     std::cout << "--------------------" << std::endl;
-    std::cout << "readData: " << std::atoi(readData.c_str()) << std::endl;
+    std::cout << "readData: " << readData << std::endl;
+    // std::cout << "readData: " << std::atoi(readData.c_str()) << std::endl;
   }
 
   serialPort.Close();

@@ -73,7 +73,7 @@ int main(int argc, char **argv)
 
   // port, baudrate, timeout in milliseconds
   // TODO: Change the timeout here
-  serial::Serial my_serial(dev, 112500, serial::Timeout::simpleTimeout(50));
+  serial::Serial my_serial(dev, 112500, serial::Timeout::simpleTimeout(20));
   my_serial.setFlowcontrol(serial::flowcontrol_none);
   // my_serial.setFlowcontrol(serial::flowcontrol_software);
   // my_serial.setFlowcontrol(serial::flowcontrol_hardware);

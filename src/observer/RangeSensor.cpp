@@ -207,14 +207,6 @@ RangeSensor::RangeSensor(const std::string & type, double dt)
 void RangeSensor::configure(const mc_control::MCController & ctl, const mc_rtc::Configuration & config)
 {
   robot_name_ = config("robot", ctl.robot().name());
-  if(config.has("range_sensor"))
-  {
-    range_sensor_name_ = static_cast<std::string>(config("range_sensor"));
-  }
-  else
-  {
-    mc_rtc::log::error_and_throw<std::invalid_argument>("[RangeSensor::{}] 'range_sensor' is mandatory in the configuration.", name_);
-  }
 
   if(config.has("serial_port"))
   {
@@ -239,12 +231,31 @@ void RangeSensor::configure(const mc_control::MCController & ctl, const mc_rtc::
     mc_rtc::log::error_and_throw<std::invalid_argument>("[RangeSensor::{}] 'baudrate' is mandatory in the configuration.", name_);
   }
 
-  mc_rtc::log::info("[RangeSensor::{}] 'serial_port' is {}", name_, range_sensor_name_);
-  mc_rtc::log::info("[RangeSensor::{}] 'range_sensor' is {}", name_, serial_port_name_);
+  if(config.has("range_sensor_top"))
+  {
+    top_sensor_.name = static_cast<std::string>(config("range_sensor_top"));
+  }
+  else
+  {
+    mc_rtc::log::error_and_throw<std::invalid_argument>("[RangeSensor::{}] 'range_sensor_top' is mandatory in the configuration.", name_);
+  }
+
+  if(config.has("range_sensor_bot"))
+  {
+    bot_sensor_.name = static_cast<std::string>(config("range_sensor_bot"));
+  }
+  else
+  {
+    mc_rtc::log::warning("[RangeSensor::{}] 'range_sensor_bot' is not defined in the configuration; only top sensor {} will be used", name_, top_sensor_.name);
+  }
+
+  mc_rtc::log::info("[RangeSensor::{}] 'serial_port' is {}", name_, serial_port_name_);
+  mc_rtc::log::info("[RangeSensor::{}] 'top_range_sensor' is {}", name_, top_sensor_.name);
+  mc_rtc::log::info("[RangeSensor::{}] 'bot_range_sensor' is {}", name_, bot_sensor_.name);
 
   startReadingDevice();
 
-  desc_ = fmt::format("{} (sensor={}, serial={})", name_, range_sensor_name_, serial_port_name_);
+  desc_ = fmt::format("{} (top_range_sensor={}, bot_range_sensor={}, serial={})", name_, top_sensor_.name, bot_sensor_.name, serial_port_name_);
 }
 
 void RangeSensor::reset(const mc_control::MCController &)
@@ -263,7 +274,17 @@ void RangeSensor::update(mc_control::MCController & ctl)
   t_ += ctl.solver().dt();
   if(serial_port_is_open_)
   {
-    ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).update(sensor_data_, t_);
+    if(top_sensor_.new_data.load())
+    {
+      ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(top_sensor_.name).update(top_sensor_.range.load(), top_sensor_.measured_time.load() * 0.5);
+      top_sensor_.new_data = false;
+    }
+
+    if(bot_sensor_.new_data.load())
+    {
+      ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(bot_sensor_.name).update(bot_sensor_.range.load(), bot_sensor_.measured_time.load() * 0.5);
+      bot_sensor_.new_data = false;
+    }
   }
 }
 
@@ -271,12 +292,28 @@ void RangeSensor::addToLogger(const mc_control::MCController & ctl,
                                    mc_rtc::Logger & logger,
                                    const std::string & category)
 {
-  logger.addLogEntry(category + "_range", [this, &ctl]() -> double {
-    return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).data();
+  logger.addLogEntry(category + "_top_range", [this, &ctl]() -> double {
+    return top_sensor_.range;
   });
-  logger.addLogEntry(category + "_timestep", [this, &ctl]() -> double {
-    return measured_sensor_time_.load();
+  logger.addLogEntry(category + "_top_time", [this, &ctl]() -> double {
+    return top_sensor_.measured_time;
   });
+  logger.addLogEntry(category + "_top_Hz", [this, &ctl]() -> double {
+    return top_sensor_.measured_Hz;
+  });
+
+  if(bot_sensor_.name != "")
+  {
+    logger.addLogEntry(category + "_bot_range", [this, &ctl]() -> double {
+      return bot_sensor_.range;
+    });
+    logger.addLogEntry(category + "_bot_time", [this, &ctl]() -> double {
+      return bot_sensor_.measured_time;
+    });
+    logger.addLogEntry(category + "_bot_Hz", [this, &ctl]() -> double {
+      return bot_sensor_.measured_Hz;
+    });
+  }
 }
 
 void RangeSensor::removeFromLogger(mc_rtc::Logger & logger, const std::string & category)
@@ -357,66 +394,166 @@ void RangeSensor::addToGUI(const mc_control::MCController & ctl,
           mc_rtc::log::warning("[RangeSensor::{}] The device is already closed", name_);
         }
       }),
-    mc_rtc::gui::Transform(fmt::format("X_0_{}", name_),
-      [this, &ctl]()
-      {
-        const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(range_sensor_name_).parent();
-        const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
-        return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s() * X_0_p;
-      }),
-    mc_rtc::gui::ArrayInput("Rotation [deg]", {"r", "p", "y"},
-      [this, &ctl]() -> Eigen::Vector3d
-      {
-        return mc_rbdyn::rpyFromMat(ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s().rotation()).unaryExpr([](double x){return x * 180. / M_PI;});
-      },
-      [this, &ctl](const Eigen::Vector3d & new_rpy)
-      {
-        const sva::PTransformd current_X_p_s = ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s();
-        const sva::PTransformd new_X_p_s(mc_rbdyn::rpyToMat(new_rpy.unaryExpr([](double x){return x * M_PI / 180.;})), current_X_p_s.translation());
-        const_cast<mc_control::MCController &>(ctl).robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s(new_X_p_s);
-      }),
-    mc_rtc::gui::ArrayInput("Translation", {"x", "y", "z"},
-      [this, &ctl]()
-      {
-        return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s().translation();
-      },
-      [this, &ctl](const Eigen::Vector3d & new_translation)
-      {
-        const sva::PTransformd current_X_p_s = ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s();
-        const sva::PTransformd new_X_p_s(current_X_p_s.rotation(), new_translation);
-        const_cast<mc_control::MCController &>(ctl).robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s(new_X_p_s);
-      }),
-    mc_rtc::gui::Transform("X_p_s",
-      [this, &ctl]()
-      {
-        const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(range_sensor_name_).parent();
-        const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
-        return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s() * X_0_p;
-      },
-      [this, &ctl](const sva::PTransformd & X_0_s)
-      {
-        const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(range_sensor_name_).parent();
-        const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
-        const sva::PTransformd new_X_p_s = X_0_s * X_0_p.inv();
-        const_cast<mc_control::MCController &>(ctl).robot(robot_name_).device<mc_mujoco::RangeSensor>(range_sensor_name_).X_p_s(new_X_p_s);
-      }),
-    mc_rtc::gui::Checkbox("Debug output", [this]() { return debug_.load(); }, [this]() { debug_ = !debug_.load(); }),
-    mc_rtc::gui::Label("Data",
+    mc_rtc::gui::Checkbox("Debug output", [this]() { return debug_.load(); }, [this]() { debug_ = !debug_.load(); })
+  );
+
+  if(bot_sensor_.name != "")
+    {
+      gui.addElement(category,
+        mc_rtc::gui::Label("Delay between 2 sensors [ms]",
+          [this]()
+          {
+            return measured_delay_between_sensor_.load();
+          })
+      );
+    }
+
+  auto top_category = category;
+  top_category.push_back("top");
+
+  gui.addElement(top_category,
+    mc_rtc::gui::Label("Range [m]",
       [this]()
       {
-        return (serial_port_is_open_ ? std::to_string(sensor_data_) : "Sensor is not opened");
+        return (serial_port_is_open_ ? std::to_string(top_sensor_.range.load()) : "Sensor is not opened");
       }),
     mc_rtc::gui::Label("Elapsed time [ms]",
       [this]()
       {
-        return measured_sensor_time_.load();
+        return top_sensor_.measured_time.load();
+      }),
+    mc_rtc::gui::Label("Frequency [Hz]",
+      [this]()
+      {
+        return top_sensor_.measured_Hz.load();
+      }),
+    mc_rtc::gui::Label("Error",
+      [this]()
+      {
+        return top_sensor_.error;
+      }),
+    mc_rtc::gui::Transform(fmt::format("X_0_{}", name_),
+      [this, &ctl]()
+      {
+        const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(top_sensor_.name).parent();
+        const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
+        return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(top_sensor_.name).X_p_s() * X_0_p;
+      }),
+    mc_rtc::gui::ArrayInput("Rotation [deg]", {"r", "p", "y"},
+      [this, &ctl]() -> Eigen::Vector3d
+      {
+        return mc_rbdyn::rpyFromMat(ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(top_sensor_.name).X_p_s().rotation()).unaryExpr([](double x){return x * 180. / M_PI;});
+      },
+      [this, &ctl](const Eigen::Vector3d & new_rpy)
+      {
+        const sva::PTransformd current_X_p_s = ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(top_sensor_.name).X_p_s();
+        const sva::PTransformd new_X_p_s(mc_rbdyn::rpyToMat(new_rpy.unaryExpr([](double x){return x * M_PI / 180.;})), current_X_p_s.translation());
+        const_cast<mc_control::MCController &>(ctl).robot(robot_name_).device<mc_mujoco::RangeSensor>(top_sensor_.name).X_p_s(new_X_p_s);
+      }),
+    mc_rtc::gui::ArrayInput("Translation", {"x", "y", "z"},
+      [this, &ctl]()
+      {
+        return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(top_sensor_.name).X_p_s().translation();
+      },
+      [this, &ctl](const Eigen::Vector3d & new_translation)
+      {
+        const sva::PTransformd current_X_p_s = ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(top_sensor_.name).X_p_s();
+        const sva::PTransformd new_X_p_s(current_X_p_s.rotation(), new_translation);
+        const_cast<mc_control::MCController &>(ctl).robot(robot_name_).device<mc_mujoco::RangeSensor>(top_sensor_.name).X_p_s(new_X_p_s);
+      }),
+    mc_rtc::gui::Transform("X_p_s",
+      [this, &ctl]()
+      {
+        const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(top_sensor_.name).parent();
+        const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
+        return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(top_sensor_.name).X_p_s() * X_0_p;
+      },
+      [this, &ctl](const sva::PTransformd & X_0_s)
+      {
+        const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(top_sensor_.name).parent();
+        const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
+        const sva::PTransformd new_X_p_s = X_0_s * X_0_p.inv();
+        const_cast<mc_control::MCController &>(ctl).robot(robot_name_).device<mc_mujoco::RangeSensor>(top_sensor_.name).X_p_s(new_X_p_s);
       })
   );
+
+  auto bot_category = category;
+  bot_category.push_back("bot");
+
+  if(bot_sensor_.name != "")
+  {
+    gui.addElement(bot_category,
+      mc_rtc::gui::Label("Range [m]",
+        [this]()
+        {
+          return (serial_port_is_open_ ? std::to_string(bot_sensor_.range.load()) : "Sensor is not opened");
+        }),
+      mc_rtc::gui::Label("Elapsed time [ms]",
+        [this]()
+        {
+          return bot_sensor_.measured_time.load();
+        }),
+      mc_rtc::gui::Label("Frequency [Hz]",
+        [this]()
+        {
+          return bot_sensor_.measured_Hz.load();
+        }),
+      mc_rtc::gui::Label("Error",
+        [this]()
+        {
+          return bot_sensor_.error;
+        }),
+        mc_rtc::gui::Transform(fmt::format("X_0_{}", name_),
+        [this, &ctl]()
+        {
+          const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(bot_sensor_.name).parent();
+          const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
+          return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(bot_sensor_.name).X_p_s() * X_0_p;
+        }),
+      mc_rtc::gui::ArrayInput("Rotation [deg]", {"r", "p", "y"},
+        [this, &ctl]() -> Eigen::Vector3d
+        {
+          return mc_rbdyn::rpyFromMat(ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(bot_sensor_.name).X_p_s().rotation()).unaryExpr([](double x){return x * 180. / M_PI;});
+        },
+        [this, &ctl](const Eigen::Vector3d & new_rpy)
+        {
+          const sva::PTransformd current_X_p_s = ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(bot_sensor_.name).X_p_s();
+          const sva::PTransformd new_X_p_s(mc_rbdyn::rpyToMat(new_rpy.unaryExpr([](double x){return x * M_PI / 180.;})), current_X_p_s.translation());
+          const_cast<mc_control::MCController &>(ctl).robot(robot_name_).device<mc_mujoco::RangeSensor>(bot_sensor_.name).X_p_s(new_X_p_s);
+        }),
+      mc_rtc::gui::ArrayInput("Translation", {"x", "y", "z"},
+        [this, &ctl]()
+        {
+          return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(bot_sensor_.name).X_p_s().translation();
+        },
+        [this, &ctl](const Eigen::Vector3d & new_translation)
+        {
+          const sva::PTransformd current_X_p_s = ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(bot_sensor_.name).X_p_s();
+          const sva::PTransformd new_X_p_s(current_X_p_s.rotation(), new_translation);
+          const_cast<mc_control::MCController &>(ctl).robot(robot_name_).device<mc_mujoco::RangeSensor>(bot_sensor_.name).X_p_s(new_X_p_s);
+        }),
+      mc_rtc::gui::Transform("X_p_s",
+        [this, &ctl]()
+        {
+          const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(bot_sensor_.name).parent();
+          const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
+          return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(bot_sensor_.name).X_p_s() * X_0_p;
+        },
+        [this, &ctl](const sva::PTransformd & X_0_s)
+        {
+          const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(bot_sensor_.name).parent();
+          const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
+          const sva::PTransformd new_X_p_s = X_0_s * X_0_p.inv();
+          const_cast<mc_control::MCController &>(ctl).robot(robot_name_).device<mc_mujoco::RangeSensor>(bot_sensor_.name).X_p_s(new_X_p_s);
+        })
+    );
+  }
 
   gui.addPlot(
     fmt::format("RangeSensor::{}", name_),
     mc_rtc::gui::plot::X("t", [this, &ctl]() { return t_; }),
-    mc_rtc::gui::plot::Y( "data", [this]() { return sensor_data_.load(); }, mc_rtc::gui::Color::Red)
+    mc_rtc::gui::plot::Y( "top_range", [this]() { return top_sensor_.range.load(); }, mc_rtc::gui::Color::Red),
+    mc_rtc::gui::plot::Y( "bot_range", [this]() { return bot_sensor_.range.load(); }, mc_rtc::gui::Color::Blue)
   );
 }
 
@@ -443,8 +580,7 @@ void RangeSensor::startReadingDevice()
         return;
       }
 
-      // int fd = open(serial_port.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
-      int fd = open(serial_port.c_str(), O_RDWR | O_NOCTTY);
+      int fd = open(serial_port.c_str(), O_RDWR);
       if(fd < 0)
       {
         serial_port_is_open_ = false;
@@ -458,83 +594,197 @@ void RangeSensor::startReadingDevice()
         serial_port_is_open_ = true;
       }
 
-      fcntl(fd, F_SETFL, 0);
-      struct termios tio;
-      tcgetattr(fd, &tio);
-      cfsetispeed(&tio, baudrate_);
-      cfsetospeed(&tio, baudrate_);
-      // non canonical, non echo back
-      tio.c_lflag &= ~(ECHO | ICANON);
-      // non blocking
-      tio.c_cc[VMIN] = 0;
-      tio.c_cc[VTIME] = 0;
-      tcsetattr(fd, TCSANOW, &tio);
+      // Create new termios struct, we call it 'tty' for convention
+      struct termios tty;
 
-      prev_time_ = clock::now();
+      // Read in existing settings, and handle any error
+      if(tcgetattr(fd, &tty) != 0)
+      {
+        mc_rtc::log::error("[[RangeSensor::{}] Error {} from tcgetattr: {}", name_, errno, strerror(errno));
+        serial_port_is_open_ = false;
+        return;
+      }
 
-      // https://stackoverflow.com/questions/8888748/how-to-check-if-given-c-string-or-char-contains-only-digits
+      tty.c_cflag &= ~PARENB; // Clear parity bit, disabling parity (most common)
+      tty.c_cflag &= ~CSTOPB; // Clear stop field, only one stop bit used in communication (most common)
+      tty.c_cflag &= ~CSIZE; // Clear all bits that set the data size
+      tty.c_cflag |= CS8; // 8 bits per byte (most common)
+      tty.c_cflag &= ~CRTSCTS; // Disable RTS/CTS hardware flow control (most common)
+      tty.c_cflag |= CREAD | CLOCAL; // Turn on READ & ignore ctrl lines (CLOCAL = 1)
+
+      tty.c_lflag &= ~ICANON;
+      tty.c_lflag &= ~ECHO; // Disable echo
+      tty.c_lflag &= ~ECHOE; // Disable erasure
+      tty.c_lflag &= ~ECHONL; // Disable new-line echo
+      tty.c_lflag &= ~ISIG; // Disable interpretation of INTR, QUIT and SUSP
+      tty.c_iflag &= ~(IXON | IXOFF | IXANY); // Turn off s/w flow ctrl
+      tty.c_iflag &= ~(IGNBRK|BRKINT|PARMRK|ISTRIP|INLCR|IGNCR|ICRNL); // Disable any special handling of received bytes
+
+      tty.c_oflag &= ~OPOST; // Prevent special interpretation of output bytes (e.g. newline chars)
+      tty.c_oflag &= ~ONLCR; // Prevent conversion of newline to carriage return/line feed
+      // tty.c_oflag &= ~OXTABS; // Prevent conversion of tabs to spaces (NOT PRESENT ON LINUX)
+      // tty.c_oflag &= ~ONOEOT; // Prevent removal of C-d chars (0x004) in output (NOT PRESENT ON LINUX)
+
+      tty.c_cc[VTIME] = 10;    // Wait for up to 1s (10 deciseconds), returning as soon as any data is received.
+      tty.c_cc[VMIN] = 0;
+
+      // Set in/out baud rate to be 9600
+      cfsetispeed(&tty, B115200);
+      cfsetospeed(&tty, B115200);
+
+      // Save tty settings, also checking for error
+      if (tcsetattr(fd, TCSANOW, &tty) != 0)
+      {
+        mc_rtc::log::error("[[RangeSensor::{}] Error {} from tcgetattr: {}", name_, errno, strerror(errno));
+        serial_port_is_open_ = false;
+        return;
+      }
+
+      // Allocate memory for read buffer, set size according to your needs
+      char read_buf [255];
+
+      auto top_start = std::chrono::high_resolution_clock::now();
+      auto bot_start = std::chrono::high_resolution_clock::now();
+
+      auto top_to_bot_start = std::chrono::high_resolution_clock::now();
+
+      std::string concatenated_data = "";
+
       auto is_digits = [](const std::string & str)
       {
         return std::all_of(str.begin(), str.end(), ::isdigit);
       };
 
+      auto tokenize = [](std::string s, std::string del = " ") -> std::vector<std::string>
+      {
+        std::vector<std::string> ret;
+        int start, end = -1 * del.size();
+        do
+        {
+          start = end + del.size();
+          end = s.find(del, start);
+          ret.push_back(s.substr(start, end - start));
+        }
+        while (end != -1);
+        return ret;
+      };
+
       is_reading_ = true;
       while(is_reading_)
       {
-        char buf[255];
-        int len = read(fd, buf, sizeof(buf));
-        if(0 < len)
+        // Reset data in read_buf
+        memset(&read_buf, '\0', sizeof(read_buf));
+
+        const int num_bytes = read(fd, &read_buf, sizeof(read_buf));
+
+        if(num_bytes <= 0)
         {
-          if(debug_.load())
-          {
-            mc_rtc::log::warning("[RangeSensor::{}] The buffer length is {}", name_, len);
-          }
+          continue;
+        }
 
-          prev_time_ = clock::now();
-          std::string str = "";
-          // -2 to remove the \n\0 character
-          for(int i = 0; i < len - 2; i++)
-          {
-            str = str + buf[i];
-          }
+        if(debug_.load())
+        {
+          mc_rtc::log::info("[RangeSensor::{}] The buffer length is {}", name_, num_bytes);
+        }
 
-          if(debug_.load())
+        for(size_t i = 0; i < num_bytes; ++i)
+        {
+          concatenated_data += read_buf[i];
+          if(concatenated_data.back() == '\n')
           {
-            mc_rtc::log::warning("[RangeSensor::{}] The buffer data as a string is '{}'", name_, str);
-          }
-
-          if(!str.empty() && is_digits(str))
-          {
-            const double data = std::stod(str);
-            if(data != 255.)
-            if(data <= 255 && data >= 25)
-            {
-              sensor_data_ = data * 0.001;
-              if(debug_.load())
-              {
-                mc_rtc::log::warning("[RangeSensor::{}] The buffer data as a double is {}", name_, data);
-              }
-            }
-          }
-          else if(str == "Try to initialize VL6180x ...")
-          {
-            mc_rtc::log::error("[RangeSensor::{}] Try to initialize VL6180x ...'", name_, str);
-          }
-          else if(str == "[Re]Boot of the ArduinoNano")
-          {
-            mc_rtc::log::error("[RangeSensor::{}] The ArduinoNano connection (?) was reboot by itself?", name_);
-          }
-
-          {
-            time_since_last_received_ = clock::now() - prev_time_;
-            measured_sensor_time_ = time_since_last_received_.count();
             if(debug_.load())
             {
-              mc_rtc::log::warning("[RangeSensor::{}] Elapsed time between 2 acqusitions {}", name_, measured_sensor_time_);
+              mc_rtc::log::info("[RangeSensor::{}] The buffer data as a string is '{}'", name_, concatenated_data);
             }
+            // Stop the clock to measure time
+            const auto end = std::chrono::high_resolution_clock::now();
+            // Remove the last 2 characters
+            if(!(concatenated_data.find("bot") != std::string::npos || concatenated_data.find("top") != std::string::npos))
+            {
+              concatenated_data = "";
+              continue;
+            }
+            concatenated_data.erase(concatenated_data.size() - 2);
+            // Tokenized
+            const std::vector<std::string> tokens = tokenize(concatenated_data, ":");
+            // Get which sensor and data
+            const std::string & who = tokens[0];
+            const std::string & data = tokens[1];
+            // Measure elapsed time
+            const double ms = std::chrono::duration<double, std::milli>(end - (who == "bot" ? bot_start : top_start)).count();
+
+            double range = -1.;
+            std::string error = "";
+            if(is_digits(data))
+            {
+              range = std::stod(data) * 0.001;
+              if(debug_.load())
+              {
+                mc_rtc::log::info("[RangeSensor::{}] The buffer data as a double is {} for {}", name_, range, who);
+              }
+            }
+            else
+            {
+              error = data;
+              if(debug_.load())
+              {
+                mc_rtc::log::error("[RangeSensor::{}] An error happened {} for {}", name_, error, who);
+              }
+            }
+
+
+            // We gather enough data
+            if(who == "bot" && bot_sensor_.name != "")
+            {
+              if(range != -1.)
+              {
+                bot_sensor_.new_data = true;
+                bot_sensor_.range = range;
+              }
+              bot_sensor_.error = error;
+              bot_sensor_.measured_time = ms;
+              bot_sensor_.measured_Hz = 1. / (ms * 0.001);
+
+              if(debug_.load())
+              {
+                mc_rtc::log::info("[RangeSensor::{}] The measure elapsed time is {} ms which corresponds to {} Hz for {}", name_, bot_sensor_.measured_time.load(), bot_sensor_.measured_Hz.load(), who);
+              }
+
+              bot_start = std::chrono::high_resolution_clock::now();
+              top_to_bot_start = std::chrono::high_resolution_clock::now();
+            }
+
+            if(who == "top")
+            {
+              if(range != -1.)
+              {
+                top_sensor_.new_data = true;
+                top_sensor_.range = range;
+              }
+              top_sensor_.error = error;
+              top_sensor_.measured_time = ms;
+              top_sensor_.measured_Hz = 1. / (ms * 0.001);
+
+              if(debug_.load())
+              {
+                mc_rtc::log::info("[RangeSensor::{}] The measure elapsed time is {} ms which corresponds to {} Hz for {}", name_, top_sensor_.measured_time.load(), top_sensor_.measured_Hz.load(), who);
+              }
+
+              if(bot_sensor_.name != "")
+              {
+                const double top_to_bot_ms = std::chrono::duration<double, std::milli>(end - top_to_bot_start).count();
+                measured_delay_between_sensor_ = top_to_bot_ms;
+              }
+
+              if(debug_.load())
+              {
+                mc_rtc::log::info("[RangeSensor::{}] The between 2 sensors is {} ms", name_, measured_delay_between_sensor_.load());
+              }
+              top_start = std::chrono::high_resolution_clock::now();
+            }
+            concatenated_data = "";
           }
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
 
       close(fd);

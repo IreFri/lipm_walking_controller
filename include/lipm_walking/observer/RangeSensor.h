@@ -57,23 +57,30 @@ protected:
 protected:
   /// @{
   std::string robot_name_ = ""; ///< Name of robot to which the rnage sensor belongs
-  std::string range_sensor_name_ = ""; ///< Name of the sensor used
   std::string serial_port_name_ = ""; ///< Name of the serial port
   bool print_reading_error_once_ = true; ///< To keep track of the serial port error printing
 
   //
   void startReadingDevice();
 
+  struct Data
+  {
+    std::string name = "";
+    std::atomic<double> range{0.};
+    std::string error;
+    std::atomic<double> measured_time{0.};
+    std::atomic<double> measured_Hz{0.};
+    std::atomic<bool> new_data{false};
+  };
+
   std::thread loop_sensor_; ///< Thread to read the sensor data asynchronously
   std::atomic<bool> debug_{false};
   std::atomic<bool> is_reading_{false};
   std::atomic<bool> serial_port_is_open_{false}; ///< To keep track of the serial port opening/closing
-  std::atomic<double> sensor_data_ {0}; ///< Data read from the sensor
-  std::atomic<double> measured_sensor_time_; ///< Measured the sensor elapsed time
+  Data top_sensor_;
+  Data bot_sensor_;
+  std::atomic<double> measured_delay_between_sensor_{0};
   int baudrate_ = 0000015;
-  clock::time_point prev_time_;
-  duration_ms time_since_last_received_{0}; // time between two successful reading
-  double timeout_ = 1000; // timeout in ms
   double t_ = 0.; // controller time
 };
 
