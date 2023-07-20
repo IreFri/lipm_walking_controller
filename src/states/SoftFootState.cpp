@@ -148,7 +148,8 @@ void SoftFootState::start()
     mc_rtc::gui::Checkbox("With ankle rotation", [this]() { return with_ankle_rotation_; }, [this]() { with_ankle_rotation_ = !with_ankle_rotation_; }),
     mc_rtc::gui::Checkbox("With position adjustment", [this]() { return with_foot_adjustment_; }, [this]() { with_foot_adjustment_ = !with_foot_adjustment_; }),
     mc_rtc::gui::Checkbox("Debug ouptut in terminal", [this]() { return debug_output_; }, [this]() { debug_output_ = !debug_output_; }),
-    mc_rtc::gui::NumberInput("Add delta delay to estimation [s]", [this]() { return delta_delay_of_estimation_; }, [this](double v){ delta_delay_of_estimation_ = v; })
+    mc_rtc::gui::NumberInput("Add delta delay to estimation [s]", [this]() { return delta_delay_of_estimation_; }, [this](double v){ delta_delay_of_estimation_ = v; }),
+    mc_rtc::gui::NumberInput("Use fixed delay to estimation if not 0. [s]", [this]() { return fixed_delay_of_estimation_; }, [this](double v){ fixed_delay_of_estimation_ = v; })
   );
 
   ctl.gui()->addXYPlot(
@@ -262,6 +263,10 @@ void SoftFootState::start()
     mc_rtc::gui::plot::Y("LeftGround", [this]() { return foot_data_[Foot::Left].ground.empty() ? 0. : foot_data_[Foot::Left].ground.back().z(); }, mc_rtc::gui::Color::Red),
     mc_rtc::gui::plot::Y("RightGround", [this]() { return foot_data_[Foot::Right].ground.empty() ? 0. : foot_data_[Foot::Right].ground.back().z(); }, mc_rtc::gui::Color::Blue)
   );
+
+  //
+  ctl.logger().addLogEntry("MyMeasures_continuous_ground_right", [this]() { return foot_data_[Foot::Right].ground.empty() ? Eigen::Vector3d::Zero() : foot_data_[Foot::Right].ground.back();} );
+  ctl.logger().addLogEntry("MyMeasures_continuous_ground_left", [this]() { return foot_data_[Foot::Left].ground.empty() ? Eigen::Vector3d::Zero() : foot_data_[Foot::Left].ground.back();} );
 
   // Subscriber for the range sensors
   right_foot_range_sensor_sub_ = mc_rtc::ROSBridge::get_node_handle()->subscribe("right_range_sensor/distance", 1, &SoftFootState::rightFRSCallback, this);
@@ -603,7 +608,16 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
       // Get the range measured by the sensor
       const sva::PTransformd X_s_m = sva::PTransformd(Eigen::Vector3d(0, 0, data.range));
 
-      const size_t delay_iterations = (delay_time  + delta_delay_of_estimation_) / ctl.solver().dt();
+      size_t delay_iterations;
+      if(fixed_delay_of_estimation_ != 0.)
+      {
+        delay_iterations = (fixed_delay_of_estimation_) / ctl.solver().dt();
+      }
+      else
+      {
+        delay_iterations = (delay_time  + delta_delay_of_estimation_) / ctl.solver().dt();
+      }
+
       if(past_foot_pose_[current_moving_foot].full() || (past_foot_pose_[current_moving_foot].size() - delay_iterations) > 0)
       {
         const int n_to_remove = past_foot_pose_[current_moving_foot].size() - delay_iterations - 1;
