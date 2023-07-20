@@ -655,8 +655,12 @@ void RangeSensor::startReadingDevice()
         return std::all_of(str.begin(), str.end(), ::isdigit);
       };
 
-      auto tokenize = [](std::string s, std::string del = " ") -> std::vector<std::string>
+      auto tokenize = [](std::string s, const std::string & del = " ") -> std::vector<std::string>
       {
+        if(s.find(del) == std::string::npos)
+        {
+          return {};
+        }
         std::vector<std::string> ret;
         int start, end = -1 * del.size();
         do
@@ -704,9 +708,19 @@ void RangeSensor::startReadingDevice()
               concatenated_data = "";
               continue;
             }
-            concatenated_data.erase(concatenated_data.size() - 2);
+
+            if(concatenated_data.size() > 2)
+            {
+              concatenated_data.erase(concatenated_data.size() - 2);
+            }
+
             // Tokenized
             const std::vector<std::string> tokens = tokenize(concatenated_data, ":");
+            if(tokens.size() != 2)
+            {
+              concatenated_data = "";
+              continue;
+            }
             // Get which sensor and data
             const std::string & who = tokens[0];
             const std::string & data = tokens[1];

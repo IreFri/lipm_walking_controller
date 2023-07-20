@@ -16,6 +16,9 @@ LIPMWalking::SoftFoot::Configured:
   with_ankle_rotation: false
   with_foot_adjustment: false
   nr_phalanx: 1
+  range_sensors:
+    left_foot: ["LeftFootRangeSensor::Top", "LeftFootRangeSensor::Bot"]
+    right_foot: ["RightFootRangeSensor::Top", "RightFootRangeSensor::Bot"]
 
 LIPMWalking::WalkFSMWithSoftFootState:
   base: Parallel

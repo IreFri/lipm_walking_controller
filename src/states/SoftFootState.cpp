@@ -67,12 +67,33 @@ void SoftFootState::start()
   nr_phalanxes_ = config_("nr_phalanx", 10);
   phalanx_length_ = foot_length_ / static_cast<double>(nr_phalanxes_);
 
+  range_sensor_names_[Foot::Left] = config_("range_sensors")("left_foot");
+  range_sensor_names_[Foot::Right] = config_("range_sensors")("right_foot");
+
+  if(range_sensor_names_[Foot::Left].empty())
+  {
+    mc_rtc::log::error("[SoftFootState] range_sensor_names_[Foot::Left] is empty");
+  }
+
+  if(range_sensor_names_[Foot::Right].empty())
+  {
+    mc_rtc::log::error("[SoftFootState] range_sensor_names_[Foot::Right] is empty");
+  }
+
+
+  //
+  past_foot_pose_[Foot::Right] = Circular_Buffer<sva::PTransformd>(0.05 / ctl.solver().dt()); // 50ms
+  past_foot_pose_[Foot::Left] = Circular_Buffer<sva::PTransformd>(0.05 / ctl.solver().dt()); // 50ms
+
+
   // Display configuration
   mc_rtc::log::info("[SoftFootState] nr_phalanxes is set to {}", nr_phalanxes_);
   mc_rtc::log::info("[SoftFootState] phalanx_length is set to {}", phalanx_length_);
   mc_rtc::log::info("[SoftFootState] with_variable_stiffness is set to {}", with_variable_stiffness_);
   mc_rtc::log::info("[SoftFootState] with_ankle_rotation is set to {}", with_ankle_rotation_);
   mc_rtc::log::info("[SoftFootState] with_foot_adjustment is set to {}", with_foot_adjustment_);
+  mc_rtc::log::info("[SoftFootState] range_sensors/left_foot is set to {}", fmt::join(range_sensor_names_[Foot::Left], ", "));
+  mc_rtc::log::info("[SoftFootState] range_sensors/right_foot is set to {}", fmt::join(range_sensor_names_[Foot::Right], ", "));
 
   // Create client
   client_ = mc_rtc::ROSBridge::get_node_handle()->serviceClient<variable_stiffness::connectionFile>("connectionFile");
@@ -98,22 +119,29 @@ void SoftFootState::start()
   ctl.gui()->addElement({"SoftFoot"}, mc_rtc::gui::Label("PhalangesStiffness", [this]() { return this->PhalangesStiffness_; }));
   ctl.logger().addLogEntry("PhalangesStiffness", [this]() { return PhalangesStiffness_; });
 
-  ctl.gui()->addElement({"SoftFoot"},
-    mc_rtc::gui::Label("RightRangeSensor",
-      [this] ()
+  for(const auto & range_sensor_name: range_sensor_names_[Foot::Right])
+  {
+    ctl.gui()->addElement({"SoftFoot"},
+    mc_rtc::gui::Label(range_sensor_name,
+      [this, range_sensor_name] ()
       {
-        const std::string sensor_name = range_sensor_name_[Foot::Right];
         const std::lock_guard<std::mutex> lock(range_sensor_mutex_);
-        return controller().robot().device<mc_mujoco::RangeSensor>(sensor_name).data();
-      }),
-    mc_rtc::gui::Label("LeftRangeSensor",
-      [this] ()
-      {
-        const std::string sensor_name = range_sensor_name_[Foot::Left];
-        const std::lock_guard<std::mutex> lock(range_sensor_mutex_);
-        return controller().robot().device<mc_mujoco::RangeSensor>(sensor_name).data();
+        return controller().robot().device<mc_mujoco::RangeSensor>(range_sensor_name).data();
       })
-  );
+    );
+  }
+
+  for(const auto & range_sensor_name: range_sensor_names_[Foot::Left])
+  {
+    ctl.gui()->addElement({"SoftFoot"},
+    mc_rtc::gui::Label(range_sensor_name,
+      [this, range_sensor_name] ()
+      {
+        const std::lock_guard<std::mutex> lock(range_sensor_mutex_);
+        return controller().robot().device<mc_mujoco::RangeSensor>(range_sensor_name).data();
+      })
+    );
+  }
 
   ctl.gui()->addElement({"SoftFoot", "Config"},
     mc_rtc::gui::Checkbox("With variable stiffness", [this]() { return with_variable_stiffness_; }, [this]() { with_variable_stiffness_ = !with_variable_stiffness_; }),
@@ -250,10 +278,6 @@ void SoftFootState::start()
     mc_rtc::gui::plot::Y("LeftGround", [this]() { return foot_data_[Foot::Left].ground.empty() ? 0. : foot_data_[Foot::Left].ground.back().z(); }, mc_rtc::gui::Color::Red),
     mc_rtc::gui::plot::Y("RightGround", [this]() { return foot_data_[Foot::Right].ground.empty() ? 0. : foot_data_[Foot::Right].ground.back().z(); }, mc_rtc::gui::Color::Blue)
   );
-
-  //
-  // past_foot_pose_[Foot::Right] = Circular_Buffer<sva::PTransformd>(delay_of_estimation_ / ctl.solver().dt());
-  // past_foot_pose_[Foot::Left] = Circular_Buffer<sva::PTransformd>(delay_of_estimation_ / ctl.solver().dt());
 
   // Subscriber for the range sensors
   right_foot_range_sensor_sub_ = mc_rtc::ROSBridge::get_node_handle()->subscribe("right_range_sensor/distance", 1, &SoftFootState::rightFRSCallback, this);
@@ -559,128 +583,90 @@ void SoftFootState::calculateCost(mc_control::fsm::Controller & ctl)
 
 void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot & current_moving_foot)
 {
-  // Select data/string based on current_moving_foot
-  std::string sensor_name = range_sensor_name_[current_moving_foot];
-
   // From here do not need to worry about which foot it is
   FootData & data = foot_data_[current_moving_foot];
-
   // Return the parent body of the sensor (phalanx)
-  const std::string& BodyOfSensor = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).parent();
+  const std::string& body_of_sensor = ctl.robot().device<mc_mujoco::RangeSensor>(range_sensor_names_[current_moving_foot][0]).parent();
   // Access the position of body name in world coordinates (phalanx position)
-  sva::PTransformd X_0_ph = ctl.realRobot().bodyPosW(BodyOfSensor);
-  // bool X_0_ph_updated = false;
+  sva::PTransformd X_0_ph = ctl.realRobot().bodyPosW(body_of_sensor);
+  bool X_0_ph_updated = false;
   // Keep in memory the current foot pose
-  // past_foot_pose_[current_moving_foot].enqueue(X_0_ph);
-  // Returns the transformation from the parent body to the sensor
-  const sva::PTransformd& X_ph_s = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).X_p_s();
-  // Get the range measured by the sensor
-  double range = 0.;
-  double acquisition_time = 0.;
+  mc_rtc::log::info("Enqueue by");
+  // We need to enqueue only one time per run
+  past_foot_pose_[current_moving_foot].enqueue(X_0_ph);
+
+  // Select data/string based on current_moving_foot
+  for(const auto & sensor_name: range_sensor_names_[current_moving_foot])
   {
-    const std::lock_guard<std::mutex> lock(range_sensor_mutex_);
-    range = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).data();
-    acquisition_time = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).time();
-  }
-  // mc_rtc::log::error("[SoftFootState] data.range {}", data.range);
-  if(range != data.range)
-  {
-    if(!controller().stabilizer_->inDoubleSupport())
+    double range = 0.;
+
+    double delay_time = 0.;
     {
-      mc_rtc::log::info("New data acquired by the sensor {}", data.range);
-      // mc_rtc::log::info("past_foot_pose has a size of {}", past_foot_pose_[current_moving_foot].size());
+      const std::lock_guard<std::mutex> lock(range_sensor_mutex_);
+      range = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).data();
+      delay_time = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).time();
     }
 
-    data.range = range;
-    const sva::PTransformd X_s_m = sva::PTransformd(Eigen::Vector3d(0, 0, data.range));
-
-    // if(use_constant_delay_of_estimation_ && past_foot_pose_[current_moving_foot].full())
-    // {
-    //   if(!controller().stabilizer_->inDoubleSupport())
-    //   {
-    //     mc_rtc::log::info("past_foot_pose is full and has a delay of {} [s] and a size of {}", delay_of_estimation_, past_foot_pose_[current_moving_foot].size());
-    //   }
-    //   auto optionnal_X_0_ph = past_foot_pose_[current_moving_foot].dequeue();
-    //   if(optionnal_X_0_ph.has_value())
-    //   {
-    //     X_0_ph = optionnal_X_0_ph.value();
-    //     X_0_ph_updated = true;
-    //   }
-    //   else
-    //   {
-    //     mc_rtc::log::error("[SoftFootState] optionnal_X_0_ph is empty; it should not happen");
-    //     return;
-    //   }
-    // }
-    // else if(!use_constant_delay_of_estimation_)
-    // {
-    //   // The acquisition time is acquisition_time
-    //   // We try to match the range data with a past body pose
-    //   const size_t iterations = acquisition_time / ctl.solver().dt();
-    //   if(!controller().stabilizer_->inDoubleSupport())
-    //   {
-    //     mc_rtc::log::error("iterations {} for time {}", iterations, acquisition_time);
-    //   }
-    //   if(iterations <= past_foot_pose_[current_moving_foot].size())
-    //   {
-    //     const size_t n_to_remove = past_foot_pose_[current_moving_foot].size() - iterations;
-    //     if(!controller().stabilizer_->inDoubleSupport())
-    //     {
-    //       mc_rtc::log::error("n_to_remove {} for past_foot_pose_[current_moving_foot].size() {}", n_to_remove, past_foot_pose_[current_moving_foot].size());
-    //     }
-    //     for(size_t i = 0; i < n_to_remove; ++i)
-    //     {
-    //       past_foot_pose_[current_moving_foot].dequeue();
-    //     }
-    //     auto optionnal_X_0_ph = past_foot_pose_[current_moving_foot].dequeue();
-    //     if(optionnal_X_0_ph.has_value())
-    //     {
-    //       X_0_ph = optionnal_X_0_ph.value();
-    //       X_0_ph_updated = true;
-    //     }
-    //     else
-    //     {
-    //       mc_rtc::log::error("[SoftFootState] optionnal_X_0_ph is empty; it should not happen");
-    //       return;
-    //     }
-    //   }
-    // }
-    // else if(use_constant_delay_of_estimation_)
-    // {
-    //   if(!controller().stabilizer_->inDoubleSupport())
-    //   {
-    //     mc_rtc::log::warning("[SoftFootState] Not enough data in the circular buffer");
-    //     return;
-    //   }
-    // }
-
-    // if(!X_0_ph_updated)
-    // {
-    //   return;
-    // }
-
-    if(!controller().stabilizer_->inDoubleSupport())
+    // mc_rtc::log::error("[SoftFootState] data.range {}", data.range);
+    if(range != data.range)
     {
-      mc_rtc::log::info("Estimation !");
-    }
+      // Update data.range
+      data.range = range;
 
-    // Keep the estimated 3d point for the ground
-    sva::PTransformd X_0_m = X_s_m * X_ph_s * X_0_ph;
-    data.ground.push_back(X_0_m.translation());
-
-    mc_rtc::log::info("ground {}", data.ground.size());
-    std::sort(data.ground.begin(), data.ground.end(),
-      [](const Eigen::Vector3d & a, const Eigen::Vector3d & b)
+      if(!controller().stabilizer_->inDoubleSupport())
       {
-        return a.x() < b.x();
+        mc_rtc::log::info("New data acquired by the sensor {}: {}", sensor_name, data.range);
+        // mc_rtc::log::info("past_foot_pose has a size of {}", past_foot_pose_[current_moving_foot].size());
       }
-    );
+      // Returns the transformation from the parent body to the sensor
+      const sva::PTransformd& X_ph_s = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).X_p_s();
+      // Get the range measured by the sensor
+      const sva::PTransformd X_s_m = sva::PTransformd(Eigen::Vector3d(0, 0, data.range));
 
-    if(data.ground.size() > 300)
-    {
-      mc_rtc::log::warning("[SoftFootState] ground size for {} foot is superior to 300; we reduce it to 100 by removing the 200 first values.", current_moving_foot == Foot::Left ? "Left" : "Right");
-      data.ground.erase(data.ground.begin(), data.ground.begin() + 100);
-      mc_rtc::log::warning("[SoftFootState] After erasing, the size of ground is {}", data.ground.size());
+      const size_t past_iterations = (delay_time  + delta_delay_of_estimation_) / ctl.solver().dt();
+      if(past_foot_pose_[current_moving_foot].full() || (past_foot_pose_[current_moving_foot].size() - past_iterations) > 0)
+      {
+        const size_t n_to_remove = past_foot_pose_[current_moving_foot].size() - past_iterations - 1;
+        // Dequeue
+        for(size_t i = 0; i < n_to_remove; ++i)
+        {
+          past_foot_pose_[current_moving_foot].dequeue();
+        }
+        auto optionnal_X_0_ph = past_foot_pose_[current_moving_foot].dequeue();
+        if(optionnal_X_0_ph.has_value())
+        {
+          X_0_ph = optionnal_X_0_ph.value();
+        }
+        else
+        {
+          mc_rtc::log::error("[SoftFootState] optionnal_X_0_ph is empty; it should not happen");
+          return;
+        }
+
+        if(!controller().stabilizer_->inDoubleSupport())
+        {
+          mc_rtc::log::info("Estimation !");
+        }
+
+        // Keep the estimated 3d point for the ground
+        sva::PTransformd X_0_m = X_s_m * X_ph_s * X_0_ph;
+        data.ground.push_back(X_0_m.translation());
+
+        std::sort(data.ground.begin(), data.ground.end(),
+          [](const Eigen::Vector3d & a, const Eigen::Vector3d & b)
+          {
+            return a.x() < b.x();
+          }
+        );
+
+        if(data.ground.size() > 300)
+        {
+          mc_rtc::log::warning("[SoftFootState] ground size for {} foot is superior to 300; we reduce it to 100 by removing the 200 first values.", current_moving_foot == Foot::Left ? "Left" : "Right");
+          data.ground.erase(data.ground.begin(), data.ground.begin() + 100);
+          mc_rtc::log::warning("[SoftFootState] After erasing, the size of ground is {}", data.ground.size());
+        }
+      }
+
     }
   }
 }
@@ -1586,7 +1572,7 @@ void SoftFootState::reset(mc_control::fsm::Controller & ctl, const Foot & foot)
   const auto X_0_p = ctl.robot().surfacePose(surface_name_[foot]);
   // Before to do so, we need to sort ground as it is unsorted and the elements order are time-based
   auto & ground = foot_data_[foot].ground;
-  
+
   const auto ground_iterator = std::find_if(ground.begin(), ground.end(), [&](const Eigen::Vector3d & v) { return v.x() >= X_0_p.translation().x() + landing_to_foot_middle_offset_ - 0.5 * foot_length_ - extra_to_compute_best_position_; });
   // Delete from the beginning of the vector up to the back part of the foot
   if(ground_iterator != ground.begin())
@@ -1649,17 +1635,17 @@ void SoftFootState::reset(mc_control::fsm::Controller & ctl, const Foot & foot)
 void SoftFootState::rightFRSCallback(const std_msgs::Float64::ConstPtr& data)
 {
   // Select data/string based on current_moving_foot
-  const std::string sensor_name = range_sensor_name_[Foot::Right];
-  const std::lock_guard<std::mutex> lock(range_sensor_mutex_);
-  controller().robot().device<mc_mujoco::RangeSensor>(sensor_name).update(data->data * 0.001, time_);
+  // const std::string sensor_name = range_sensor_names_[Foot::Right];
+  // const std::lock_guard<std::mutex> lock(range_sensor_mutex_);
+  // controller().robot().device<mc_mujoco::RangeSensor>(sensor_name).update(data->data * 0.001, time_);
 }
 
 void SoftFootState::leftFRSCallback(const std_msgs::Float64::ConstPtr& data)
 {
   // Select data/string based on current_moving_foot
-  const std::string sensor_name = range_sensor_name_[Foot::Left];
-  const std::lock_guard<std::mutex> lock(range_sensor_mutex_);
-  controller().robot().device<mc_mujoco::RangeSensor>(sensor_name).update(data->data * 0.001, time_);
+  // const std::string sensor_name = range_sensor_names_[Foot::Left];
+  // const std::lock_guard<std::mutex> lock(range_sensor_mutex_);
+  // controller().robot().device<mc_mujoco::RangeSensor>(sensor_name).update(data->data * 0.001, time_);
 }
 
 } // namespace lipm_walking

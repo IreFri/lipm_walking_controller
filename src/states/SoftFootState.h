@@ -230,20 +230,17 @@ protected:
     {Foot::Right, "R_VARSTIFF"}
   };
 
-  std::unordered_map<Foot, std::string> range_sensor_name_ = {
-    {Foot::Left, "LeftFootRangeSensor"},
-    {Foot::Right, "RightFootRangeSensor"}
-  };
-
   std::unordered_map<Foot, std::string> surface_name_ = {
     {Foot::Left, "LeftFootCenter"},
     {Foot::Right, "RightFootCenter"}
   };
 
+  // Initialized by .yaml
+  std::unordered_map<Foot, std::vector<std::string>> range_sensor_names_;
+
   // Keep preivous poses for ground estimation
-  // double delay_of_estimation_ = 0.005;
-  // bool use_constant_delay_of_estimation_ = true;
-  // std::unordered_map<Foot, Circular_Buffer<sva::PTransformd>> past_foot_pose_;
+  double delta_delay_of_estimation_ = 0.;
+  std::unordered_map<Foot, Circular_Buffer<sva::PTransformd>> past_foot_pose_;
 
   // TODO: Ugly hardcoded value
   // double foot_length_ = 0.27742;

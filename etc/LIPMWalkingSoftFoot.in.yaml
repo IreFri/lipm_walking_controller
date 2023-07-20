@@ -1385,14 +1385,15 @@ ObserverPipelines:
       name: LeftRangeSensor
       gui: true
       config:
-        range_sensor_top: "LeftFootRangeSensor"
-        range_sensor_bot: "LeftFootRangeSensor"
-        serial_port: "/dev/ttyACM0"
+        range_sensor_top: "LeftFootRangeSensor::Top"
+        range_sensor_bot: "LeftFootRangeSensor::Bot"
+        serial_port: "/dev/ttyACM1"
         baudrate: B115200
     - type: RangeSensor
       name: RightRangeSensor
       gui: true
       config:
-        range_sensor_top: "RightFootRangeSensor"
+        range_sensor_top: "RightFootRangeSensor::Top"
+        range_sensor_bot: "RightFootRangeSensor::Bot"
         serial_port: "/dev/ttyUSB1"
         baudrate: B115200
