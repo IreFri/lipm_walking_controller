@@ -69,6 +69,8 @@ void SoftFootState::start()
 
   range_sensor_names_[Foot::Left] = config_("range_sensors")("left_foot");
   range_sensor_names_[Foot::Right] = config_("range_sensors")("right_foot");
+  range_sensor_data_[Foot::Left] = 0.;
+  range_sensor_data_[Foot::Right] = 0.;
 
   if(range_sensor_names_[Foot::Left].empty())
   {
@@ -579,9 +581,10 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
       delay_time = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).time();
     }
 
-    if(range != data.range)
+    if(range_sensor_data_[current_moving_foot] != range)
     {
       // Update data.range
+      range_sensor_data_[current_moving_foot] = range;
       data.range = range;
 
       // Returns the transformation from the parent body to the sensor
