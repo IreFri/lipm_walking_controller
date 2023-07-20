@@ -82,8 +82,8 @@ void SoftFootState::start()
 
 
   //
-  past_foot_pose_[Foot::Right] = Circular_Buffer<sva::PTransformd>(0.05 / ctl.solver().dt()); // 50ms
-  past_foot_pose_[Foot::Left] = Circular_Buffer<sva::PTransformd>(0.05 / ctl.solver().dt()); // 50ms
+  past_foot_pose_[Foot::Right] = Circular_Buffer<sva::PTransformd>(0.5 / ctl.solver().dt()); // 0.5s
+  past_foot_pose_[Foot::Left] = Circular_Buffer<sva::PTransformd>(0.5 / ctl.solver().dt()); // 0.5s
 
 
   // Display configuration
@@ -146,25 +146,9 @@ void SoftFootState::start()
   ctl.gui()->addElement({"SoftFoot", "Config"},
     mc_rtc::gui::Checkbox("With variable stiffness", [this]() { return with_variable_stiffness_; }, [this]() { with_variable_stiffness_ = !with_variable_stiffness_; }),
     mc_rtc::gui::Checkbox("With ankle rotation", [this]() { return with_ankle_rotation_; }, [this]() { with_ankle_rotation_ = !with_ankle_rotation_; }),
-    mc_rtc::gui::Checkbox("With position adjustment", [this]() { return with_foot_adjustment_; }, [this]() { with_foot_adjustment_ = !with_foot_adjustment_; })
-  //   mc_rtc::gui::Checkbox("Use constant delay for estimation", [this]() { return use_constant_delay_of_estimation_; }, [this]() { use_constant_delay_of_estimation_ = !use_constant_delay_of_estimation_; }),
-  //   mc_rtc::gui::NumberInput("Delay of estimation [s]",
-  //     [this]() { return delay_of_estimation_; },
-  //     [this, &ctl](double delay_of_estimation)
-  //     {
-  //       if(delay_of_estimation_ < ctl.solver().dt())
-  //       {
-  //         mc_rtc::log::error("[SoftFootState] Delay of estimation has to be superior or equal to {} [s]", ctl.solver().dt());
-  //         return;
-  //       }
-  //       delay_of_estimation_ = delay_of_estimation;
-  //       //
-  //       const size_t new_size = delay_of_estimation_ / ctl.solver().dt();
-
-  //       past_foot_pose_[Foot::Right].resize(new_size);
-  //       past_foot_pose_[Foot::Left].resize(new_size);
-
-  //     })
+    mc_rtc::gui::Checkbox("With position adjustment", [this]() { return with_foot_adjustment_; }, [this]() { with_foot_adjustment_ = !with_foot_adjustment_; }),
+    mc_rtc::gui::Checkbox("Debug ouptut in terminal", [this]() { return debug_output_; }, [this]() { debug_output_ = !debug_output_; }),
+    mc_rtc::gui::NumberInput("Add delta delay to estimation [s]", [this]() { return delta_delay_of_estimation_; }, [this](double v){ delta_delay_of_estimation_ = v; })
   );
 
   ctl.gui()->addXYPlot(
@@ -304,7 +288,11 @@ void SoftFootState::runState()
     estimateGround(ctl, current_moving_foot);
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration<double, std::milli>(stop - start);
-    // mc_rtc::log::warning("[SoftFootState] estimateGround(ctl, current_moving_foot) took {:.4f}ms", duration.count());
+    if(debug_output_)
+    {
+      // It is spamming to much the terminal
+      // mc_rtc::log::warning("[SoftFootState] estimateGround(ctl, current_moving_foot) took {:.4f}ms", duration.count());
+    }
   }
 
   // Check if we are in single support or not
@@ -435,7 +423,7 @@ void SoftFootState::runState()
       extractGroundSegment(ctl, current_moving_foot, X_0_landing.translation());
       auto stop = std::chrono::high_resolution_clock::now();
       auto duration = std::chrono::duration<double, std::milli>(stop - start);
-      mc_rtc::log::warning("[SoftFootState] extractGroundSegment(ctl, current_moving_foot, X_0_landing.translation()) took {:.4f}ms", duration.count());
+      mc_rtc::log::info("[SoftFootState] extractGroundSegment(ctl, current_moving_foot, X_0_landing.translation()) took {:.4f}ms", duration.count());
     }
     // Continue only if we have enough data such as the foot is smaller than the estimated ground
     if(!ground_segment_[current_moving_foot].raw.empty())
@@ -448,7 +436,7 @@ void SoftFootState::runState()
           extractAltitudeProfileFromGroundSegment(current_moving_foot);
           auto stop = std::chrono::high_resolution_clock::now();
           auto duration = std::chrono::duration<double, std::milli>(stop - start);
-          mc_rtc::log::warning("[SoftFootState] extractAltitudeProfileFromGroundSegment(current_moving_foot) took {:.4f}ms", duration.count());
+          mc_rtc::log::info("[SoftFootState] extractAltitudeProfileFromGroundSegment(current_moving_foot) took {:.4f}ms", duration.count());
         }
         // call the server and update the variable stiffness
         if(with_variable_stiffness_)
@@ -461,7 +449,7 @@ void SoftFootState::runState()
           computeSegmentConvexHull(ctl, current_moving_foot);
           auto stop = std::chrono::high_resolution_clock::now();
           auto duration = std::chrono::duration<double, std::milli>(stop - start);
-          mc_rtc::log::warning("[SoftFootState] computeSegmentConvexHull(ctl, current_moving_foot) took {:.4f}ms", duration.count());
+          mc_rtc::log::info("[SoftFootState] computeSegmentConvexHull(ctl, current_moving_foot) took {:.4f}ms", duration.count());
         }
         // Find best landing position
         if(with_foot_adjustment_)
@@ -472,7 +460,7 @@ void SoftFootState::runState()
             computeMinMaxAngle(current_moving_foot);
             auto stop = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration<double, std::milli>(stop - start);
-            mc_rtc::log::warning("[SoftFootState] computeMinMaxAngle(current_moving_foot) took {:.4f}ms", duration.count());
+            mc_rtc::log::info("[SoftFootState] computeMinMaxAngle(current_moving_foot) took {:.4f}ms", duration.count());
           }
           // Compute the landing position
           {
@@ -480,7 +468,7 @@ void SoftFootState::runState()
             computeFootLandingPosition(current_moving_foot, X_0_landing.translation());
             auto stop = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration<double, std::milli>(stop - start);
-            mc_rtc::log::warning("[SoftFootState] computeFootLandingPosition(current_moving_foot, X_0_landing.translation()) took {:.4f}ms", duration.count());
+            mc_rtc::log::info("[SoftFootState] computeFootLandingPosition(current_moving_foot, X_0_landing.translation()) took {:.4f}ms", duration.count());
           }
           // Update landing pose
           X_0_landing = sva::PTransformd(Eigen::Vector3d(foot_data_[current_moving_foot].position_offset_x, 0., 0.)) * X_0_landing;
@@ -493,7 +481,7 @@ void SoftFootState::runState()
             computeFootLandingAngle(current_moving_foot, X_0_landing.translation());
             auto stop = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration<double, std::milli>(stop - start);
-            mc_rtc::log::warning("[SoftFootState] computeFootLandingAngle(current_moving_foot, X_0_landing.translation()) took {:.4f}ms", duration.count());
+            mc_rtc::log::info("[SoftFootState] computeFootLandingAngle(current_moving_foot, X_0_landing.translation()) took {:.4f}ms", duration.count());
           }
         }
         // Update targeted pose
@@ -590,9 +578,7 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
   // Access the position of body name in world coordinates (phalanx position)
   sva::PTransformd X_0_ph = ctl.realRobot().bodyPosW(body_of_sensor);
   bool X_0_ph_updated = false;
-  // Keep in memory the current foot pose
-  mc_rtc::log::info("Enqueue by");
-  // We need to enqueue only one time per run
+  // Keep in memory the current foot pose;  We need to enqueue only one time per run
   past_foot_pose_[current_moving_foot].enqueue(X_0_ph);
 
   // Select data/string based on current_moving_foot
@@ -607,31 +593,32 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
       delay_time = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).time();
     }
 
-    // mc_rtc::log::error("[SoftFootState] data.range {}", data.range);
     if(range != data.range)
     {
       // Update data.range
       data.range = range;
 
-      if(!controller().stabilizer_->inDoubleSupport())
-      {
-        mc_rtc::log::info("New data acquired by the sensor {}: {}", sensor_name, data.range);
-        // mc_rtc::log::info("past_foot_pose has a size of {}", past_foot_pose_[current_moving_foot].size());
-      }
       // Returns the transformation from the parent body to the sensor
       const sva::PTransformd& X_ph_s = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).X_p_s();
       // Get the range measured by the sensor
       const sva::PTransformd X_s_m = sva::PTransformd(Eigen::Vector3d(0, 0, data.range));
 
-      const size_t past_iterations = (delay_time  + delta_delay_of_estimation_) / ctl.solver().dt();
-      if(past_foot_pose_[current_moving_foot].full() || (past_foot_pose_[current_moving_foot].size() - past_iterations) > 0)
+      const size_t delay_iterations = (delay_time  + delta_delay_of_estimation_) / ctl.solver().dt();
+      if(past_foot_pose_[current_moving_foot].full() || (past_foot_pose_[current_moving_foot].size() - delay_iterations) > 0)
       {
-        const size_t n_to_remove = past_foot_pose_[current_moving_foot].size() - past_iterations - 1;
+        const int n_to_remove = past_foot_pose_[current_moving_foot].size() - delay_iterations - 1;
+        if(!controller().stabilizer_->inDoubleSupport() && debug_output_)
+        {
+          mc_rtc::log::info("[SoftFootState] We saved {} / {} foot pose and we need to go back of {} iterations.", past_foot_pose_[current_moving_foot].size(), past_foot_pose_[current_moving_foot].capacity(), delay_iterations);
+          mc_rtc::log::info("[SoftFootState] We will remove {} elements.", n_to_remove);
+          mc_rtc::log::warning("[SoftFootState] Please ensure that past_foot_pose_ is not full i.e size {} < capacity {}", past_foot_pose_[current_moving_foot].size(), past_foot_pose_[current_moving_foot].capacity());
+        }
         // Dequeue
-        for(size_t i = 0; i < n_to_remove; ++i)
+        for(int i = 0; i < n_to_remove; ++i)
         {
           past_foot_pose_[current_moving_foot].dequeue();
         }
+
         auto optionnal_X_0_ph = past_foot_pose_[current_moving_foot].dequeue();
         if(optionnal_X_0_ph.has_value())
         {
@@ -641,11 +628,6 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
         {
           mc_rtc::log::error("[SoftFootState] optionnal_X_0_ph is empty; it should not happen");
           return;
-        }
-
-        if(!controller().stabilizer_->inDoubleSupport())
-        {
-          mc_rtc::log::info("Estimation !");
         }
 
         // Keep the estimated 3d point for the ground
@@ -734,8 +716,8 @@ void SoftFootState::extractGroundSegment(mc_control::fsm::Controller & ctl, cons
     }
   }
 
-  mc_rtc::log::info("[SoftFootState] ground_segment_[{}].raw {}", current_moving_foot == Foot::Left ? "Left" : "Right", ground_segment_[current_moving_foot].raw.size());
-  mc_rtc::log::info("[SoftFootState] ground_segment_[{}].filtered {}", current_moving_foot == Foot::Left ? "Left" : "Right", ground_segment_[current_moving_foot].filtered.size());
+  mc_rtc::log::info("[SoftFootState] ground_segment_[{}].raw.size() {}", current_moving_foot == Foot::Left ? "Left" : "Right", ground_segment_[current_moving_foot].raw.size());
+  mc_rtc::log::info("[SoftFootState] ground_segment_[{}].filtered.size() {}", current_moving_foot == Foot::Left ? "Left" : "Right", ground_segment_[current_moving_foot].filtered.size());
 
   // Add trajectory
   if(ground_segment_[current_moving_foot].raw.size() > 5)
@@ -757,8 +739,6 @@ void SoftFootState::extractAltitudeProfileFromGroundSegment(const Foot & current
   // Save the selected segment in raw data of ground segment structure
   std::transform(raw_segment.begin(), raw_segment.end(), std::back_inserter(foot_data_[current_moving_foot].altitude),
     [](const Eigen::Vector3d & v) { return v.z(); });
-
-  mc_rtc::log::info("[SoftFootState] extractAltitudeProfileFromGroundSegment");
 }
 
 void SoftFootState::updateVariableStiffness(mc_control::fsm::Controller & ctl, const Foot & current_moving_foot)
@@ -768,7 +748,7 @@ void SoftFootState::updateVariableStiffness(mc_control::fsm::Controller & ctl, c
 
   if (client_.call(srv))
   {
-    mc_rtc::log::success("Stiffness: {}", srv.response.stiffness);
+    mc_rtc::log::success("[SoftFootState] We udpate the sole stiffness with {}", srv.response.stiffness);
     foot_data_[current_moving_foot].k = srv.response.stiffness;
     // Solution to modify the variable stiffness
     auto stiffnessToAngle = [this](double VarStiff)
@@ -790,8 +770,6 @@ void SoftFootState::updateVariableStiffness(mc_control::fsm::Controller & ctl, c
   {
     mc_rtc::log::error("[SoftFootState] Failed to call service connectionFile to compute the variable stiffness");
   }
-
-  mc_rtc::log::info("[SoftFootState] updateVariableStiffness");
 }
 
 void SoftFootState::computeSegmentConvexHull(mc_control::fsm::Controller & ctl, const Foot & current_moving_foot)

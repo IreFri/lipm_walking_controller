@@ -270,6 +270,8 @@ protected:
 
   std::mutex range_sensor_mutex_;
 
+  bool debug_output_ = false;
+
 };
 
 } // namespace lipm_walking::states
