@@ -241,6 +241,7 @@ protected:
   // Keep preivous poses for ground estimation
   double delta_delay_of_estimation_ = 0.;
   double fixed_delay_of_estimation_ = 0.;
+  bool use_real_robot_for_estimation_ = true;
   std::unordered_map<Foot, Circular_Buffer<sva::PTransformd>> past_foot_pose_;
 
   // TODO: Ugly hardcoded value

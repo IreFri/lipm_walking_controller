@@ -148,6 +148,7 @@ void SoftFootState::start()
     mc_rtc::gui::Checkbox("With ankle rotation", [this]() { return with_ankle_rotation_; }, [this]() { with_ankle_rotation_ = !with_ankle_rotation_; }),
     mc_rtc::gui::Checkbox("With position adjustment", [this]() { return with_foot_adjustment_; }, [this]() { with_foot_adjustment_ = !with_foot_adjustment_; }),
     mc_rtc::gui::Checkbox("Debug ouptut in terminal", [this]() { return debug_output_; }, [this]() { debug_output_ = !debug_output_; }),
+    mc_rtc::gui::Checkbox("Use real robot for ground estimation", [this]() { return use_real_robot_for_estimation_; }, [this]() { use_real_robot_for_estimation_ = !use_real_robot_for_estimation_; }),
     mc_rtc::gui::NumberInput("Add delta delay to estimation [s]", [this]() { return delta_delay_of_estimation_; }, [this](double v){ delta_delay_of_estimation_ = v; }),
     mc_rtc::gui::NumberInput("Use fixed delay to estimation if not 0. [s]", [this]() { return fixed_delay_of_estimation_; }, [this](double v){ fixed_delay_of_estimation_ = v; })
   );
@@ -581,7 +582,15 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
   // Return the parent body of the sensor (phalanx)
   const std::string& body_of_sensor = ctl.robot().device<mc_mujoco::RangeSensor>(range_sensor_names_[current_moving_foot][0]).parent();
   // Access the position of body name in world coordinates (phalanx position)
-  sva::PTransformd X_0_ph = ctl.realRobot().bodyPosW(body_of_sensor);
+  sva::PTransformd X_0_ph;
+  if(use_real_robot_for_estimation_)
+  {
+    X_0_ph = ctl.realRobot().bodyPosW(body_of_sensor);
+  }
+  else
+  {
+    X_0_ph = ctl.robot().bodyPosW(body_of_sensor);
+  }
   bool X_0_ph_updated = false;
   // Keep in memory the current foot pose;  We need to enqueue only one time per run
   past_foot_pose_[current_moving_foot].enqueue(X_0_ph);
