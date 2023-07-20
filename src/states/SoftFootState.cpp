@@ -221,53 +221,25 @@ void SoftFootState::start()
   ctl.gui()->addXYPlot(
     "GroundEstimation",
     mc_rtc::gui::plot::XY("LeftFoot",
-      [this]()
-      {
-        if(!foot_data_[Foot::Left].ground.empty())
-        {
-          return foot_data_[Foot::Left].ground.empty() ? 0. : foot_data_[Foot::Left].ground.back().x();
-        }
-        return 0.;
-      },
-      [this]()
-      {
-        if(!foot_data_[Foot::Left].ground.empty())
-        {
-          return foot_data_[Foot::Left].ground.empty() ? 0. : foot_data_[Foot::Left].ground.back().z();
-        }
-        return 0.;
-      },
+      [this](){ return foot_data_[Foot::Left].last_ground.x(); },
+      [this](){ return foot_data_[Foot::Left].last_ground.z(); },
       mc_rtc::gui::Color::Red),
     mc_rtc::gui::plot::XY("RightFoot",
-      [this]()
-      {
-        if(!foot_data_[Foot::Right].ground.empty())
-        {
-          return foot_data_[Foot::Right].ground.empty() ? 0. : foot_data_[Foot::Right].ground.back().x();
-        }
-        return 0.;
-      },
-      [this]()
-      {
-        if(!foot_data_[Foot::Right].ground.empty())
-        {
-          return foot_data_[Foot::Right].ground.empty() ? 0. : foot_data_[Foot::Right].ground.back().z();
-        }
-        return 0.;
-      },
+      [this](){ return foot_data_[Foot::Right].last_ground.x(); },
+      [this](){ return foot_data_[Foot::Right].last_ground.z(); },
       mc_rtc::gui::Color::Blue)
   );
 
   ctl.gui()->addPlot(
     "Ground",
     mc_rtc::gui::plot::X("t", [this, &ctl]() { static double t = 0.; return t += ctl.solver().dt(); }),
-    mc_rtc::gui::plot::Y("LeftGround", [this]() { return foot_data_[Foot::Left].ground.empty() ? 0. : foot_data_[Foot::Left].ground.back().z(); }, mc_rtc::gui::Color::Red),
-    mc_rtc::gui::plot::Y("RightGround", [this]() { return foot_data_[Foot::Right].ground.empty() ? 0. : foot_data_[Foot::Right].ground.back().z(); }, mc_rtc::gui::Color::Blue)
+    mc_rtc::gui::plot::Y("LeftGround", [this]() { return foot_data_[Foot::Left].last_ground.z(); }, mc_rtc::gui::Color::Red),
+    mc_rtc::gui::plot::Y("RightGround", [this]() { return foot_data_[Foot::Right].last_ground.z(); }, mc_rtc::gui::Color::Blue)
   );
 
   //
-  ctl.logger().addLogEntry("MyMeasures_continuous_ground_right", [this]() { return foot_data_[Foot::Right].ground.empty() ? Eigen::Vector3d::Zero() : foot_data_[Foot::Right].ground.back();} );
-  ctl.logger().addLogEntry("MyMeasures_continuous_ground_left", [this]() { return foot_data_[Foot::Left].ground.empty() ? Eigen::Vector3d::Zero() : foot_data_[Foot::Left].ground.back();} );
+  ctl.logger().addLogEntry("MyMeasures_continuous_ground_right", [this]() { return foot_data_[Foot::Right].last_ground;} );
+  ctl.logger().addLogEntry("MyMeasures_continuous_ground_left", [this]() { return foot_data_[Foot::Left].last_ground;} );
 
   // Subscriber for the range sensors
   right_foot_range_sensor_sub_ = mc_rtc::ROSBridge::get_node_handle()->subscribe("right_range_sensor/distance", 1, &SoftFootState::rightFRSCallback, this);
@@ -381,7 +353,7 @@ void SoftFootState::runState()
         });
 
       ctl.gui()->addElement({"SoftFoot"},
-        mc_rtc::gui::Point3D(name + "_point_ground", {mc_rtc::gui::Color::Green}, [this, foot](){ return foot_data_[foot].ground.empty() ? Eigen::Vector3d::Zero() : foot_data_[foot].ground.back(); }),
+        mc_rtc::gui::Point3D(name + "_point_ground", {mc_rtc::gui::Color::Green}, [this, foot](){ return foot_data_[foot].last_ground; }),
         mc_rtc::gui::Trajectory(name + "_ground", {mc_rtc::gui::Color::Green}, [this, foot]() { return foot_data_[foot].ground; })
       );
 
@@ -654,8 +626,14 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
         }
 
         // Keep the estimated 3d point for the ground
-        sva::PTransformd X_0_m = X_s_m * X_ph_s * X_0_ph;
+        const sva::PTransformd X_0_m = X_s_m * X_ph_s * X_0_ph;
         data.ground.push_back(X_0_m.translation());
+        data.last_ground = data.ground.back();
+
+        if(!controller().stabilizer_->inDoubleSupport() && debug_output_)
+        {
+          mc_rtc::log::info("[SoftFootState] The estimation of ground altitude is {} [m]", X_0_m.translation().z());
+        }
 
         std::sort(data.ground.begin(), data.ground.end(),
           [](const Eigen::Vector3d & a, const Eigen::Vector3d & b)
