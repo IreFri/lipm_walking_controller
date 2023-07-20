@@ -276,13 +276,13 @@ void RangeSensor::update(mc_control::MCController & ctl)
   {
     if(top_sensor_.new_data.load())
     {
-      ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(top_sensor_.name).update(top_sensor_.range.load(), top_sensor_.measured_time.load() * 0.5);
+      ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(top_sensor_.name).update(top_sensor_.range.load(), top_sensor_.measured_time.load() * 0.5 * 0.001);
       top_sensor_.new_data = false;
     }
 
     if(bot_sensor_.new_data.load())
     {
-      ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(bot_sensor_.name).update(bot_sensor_.range.load(), bot_sensor_.measured_time.load() * 0.5);
+      ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(bot_sensor_.name).update(bot_sensor_.range.load(), bot_sensor_.measured_time.load() * 0.5 * 0.001);
       bot_sensor_.new_data = false;
     }
   }
