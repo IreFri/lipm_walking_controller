@@ -299,7 +299,7 @@ void SoftFootState::runState()
     else if (!ctl.gui()->hasElement({"SoftFoot"}, name + "_point_ground"))
     {
       // Handle logger and gui
-      ctl.logger().addLogEntry("MyMeasures_" + name + "_ground", [this, foot]() { return foot_data_[foot].ground.empty() ? Eigen::Vector3d::Zero() : foot_data_[foot].ground.back();} );
+      ctl.logger().addLogEntry("MyMeasures_" + name + "_ground", [this, foot]() { return foot_data_[foot].last_ground;} );
       ctl.logger().addLogEntry("MyMeasures_" + name + "_back_foot_x", [this, foot]() { return controller().targetContact().pose.translation().x() + landing_to_foot_middle_offset_ - foot_length_ * 0.5;} );
       ctl.logger().addLogEntry("MyMeasures_" + name + "_front_foot_x", [this, foot]() { return controller().targetContact().pose.translation().x() + landing_to_foot_middle_offset_ + foot_length_ * 0.5;} );
       ctl.logger().addLogEntry("MyMeasures_" + name + "_back_foot_z", [this, foot]() { return controller().targetContact().pose.translation().z();} );
