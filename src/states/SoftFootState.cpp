@@ -601,7 +601,7 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
 
       if(past_foot_pose_[current_moving_foot].full() || (past_foot_pose_[current_moving_foot].size() - delay_iterations) > 0)
       {
-        const int n_to_remove = delay_iterations;
+        const int n_to_remove = past_foot_pose_[current_moving_foot].size() - delay_iterations;
         if(!controller().stabilizer_->inDoubleSupport() && debug_output_)
         {
           mc_rtc::log::info("[SoftFootState] We saved {} / {} foot pose and we need to go back of {} iterations.", past_foot_pose_[current_moving_foot].size(), past_foot_pose_[current_moving_foot].capacity(), delay_iterations);
