@@ -238,7 +238,7 @@ protected:
 
   // Initialized by .yaml
   std::unordered_map<Foot, std::vector<std::string>> range_sensor_names_;
-  std::unordered_map<Foot, double> range_sensor_data_;
+  std::unordered_map<Foot, std::unordered_map<std::string, double>> range_sensor_data_;
 
   // Keep preivous poses for ground estimation
   double delta_delay_of_estimation_ = 0.;

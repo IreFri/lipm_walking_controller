@@ -68,9 +68,16 @@ void SoftFootState::start()
   phalanx_length_ = foot_length_ / static_cast<double>(nr_phalanxes_);
 
   range_sensor_names_[Foot::Left] = config_("range_sensors")("left_foot");
+  for(const auto & range_sensor_name: range_sensor_names_[Foot::Left])
+  {
+    range_sensor_data_[Foot::Left][range_sensor_name] = 0.;
+  }
+
   range_sensor_names_[Foot::Right] = config_("range_sensors")("right_foot");
-  range_sensor_data_[Foot::Left] = 0.;
-  range_sensor_data_[Foot::Right] = 0.;
+  for(const auto & range_sensor_name: range_sensor_names_[Foot::Right])
+  {
+    range_sensor_data_[Foot::Right][range_sensor_name] = 0.;
+  }
 
   if(range_sensor_names_[Foot::Left].empty())
   {
@@ -335,6 +342,10 @@ void SoftFootState::runState()
           return d;
         });
       ctl.logger().addLogEntry("MyMeasures_" + name + "_range", [this, foot]() { return foot_data_[foot].range;} );
+      for(const auto & range_sensor_name: range_sensor_names_[foot])
+      {
+        ctl.logger().addLogEntry("MyMeasures_" + name + "_" + range_sensor_name + "_range", [this, foot, range_sensor_name]() { return range_sensor_data_[foot][range_sensor_name];} );
+      }
       ctl.logger().addLogEntry("MyMeasures_" + name + "_k", [this, foot]() { return foot_data_[foot].k;} );
       ctl.logger().addLogEntry("MyMeasures_" + name + "_angle", [this, foot]() { return foot_data_[foot].angle;} );
       ctl.logger().addLogEntry("MyMeasures_" + name + "_min_max_phalanxes_angle", [this, foot]() { return foot_data_[foot].min_max_phalanxes_angle;} );
@@ -573,7 +584,6 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
   for(const auto & sensor_name: range_sensor_names_[current_moving_foot])
   {
     double range = 0.;
-
     double delay_time = 0.;
     {
       const std::lock_guard<std::mutex> lock(range_sensor_mutex_);
@@ -581,10 +591,10 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
       delay_time = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).time();
     }
 
-    if(range_sensor_data_[current_moving_foot] != range)
+    if(range_sensor_data_[current_moving_foot][sensor_name] != range)
     {
       // Update data.range
-      range_sensor_data_[current_moving_foot] = range;
+      range_sensor_data_[current_moving_foot][sensor_name] = range;
       data.range = range;
 
       // Returns the transformation from the parent body to the sensor
@@ -1580,6 +1590,10 @@ void SoftFootState::reset(mc_control::fsm::Controller & ctl, const Foot & foot)
   const std::string name = foot == Foot::Left ? "left" : "right";
   // Reset logger
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_range");
+  for(const auto & range_sensor_name: range_sensor_names_[foot])
+  {
+    ctl.logger().removeLogEntry("MyMeasures_" + name + "_" + range_sensor_name + "_range");
+  }
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_ground");
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_back_foot_x");
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_front_foot_x");
