@@ -204,6 +204,8 @@ protected:
   {
     std::vector<Eigen::Vector3d> ground;
     Eigen::Vector3d last_ground;
+    Eigen::Vector3d last_ground_control;
+    Eigen::Vector3d last_ground_Identity;
     std::vector<std::array<double, 2>> phalanxes;
     std::vector<double> altitude;
     double k;
@@ -244,6 +246,7 @@ protected:
   double fixed_delay_of_estimation_ = 0.;
   bool use_real_robot_for_estimation_ = true;
   std::unordered_map<Foot, Circular_Buffer<sva::PTransformd>> past_foot_pose_;
+  std::unordered_map<Foot, Circular_Buffer<sva::PTransformd>> past_foot_pose_control_;
 
   // TODO: Ugly hardcoded value
   // double foot_length_ = 0.27742;

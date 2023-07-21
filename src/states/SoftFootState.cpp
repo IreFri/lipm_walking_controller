@@ -93,6 +93,9 @@ void SoftFootState::start()
   //
   past_foot_pose_[Foot::Right] = Circular_Buffer<sva::PTransformd>(0.5 / ctl.solver().dt()); // 0.5s
   past_foot_pose_[Foot::Left] = Circular_Buffer<sva::PTransformd>(0.5 / ctl.solver().dt()); // 0.5s
+  // For logging
+  past_foot_pose_control_[Foot::Right] = Circular_Buffer<sva::PTransformd>(0.5 / ctl.solver().dt()); // 0.5s
+  past_foot_pose_control_[Foot::Left] = Circular_Buffer<sva::PTransformd>(0.5 / ctl.solver().dt()); // 0.5s
 
 
   // Display configuration
@@ -312,6 +315,8 @@ void SoftFootState::runState()
     {
       // Handle logger and gui
       ctl.logger().addLogEntry("MyMeasures_" + name + "_ground", [this, foot]() { return foot_data_[foot].last_ground;} );
+      ctl.logger().addLogEntry("MyMeasures_" + name + "_ground_control", [this, foot]() { return foot_data_[foot].last_ground_control;} );
+      ctl.logger().addLogEntry("MyMeasures_" + name + "_ground_Identity", [this, foot]() { return foot_data_[foot].last_ground_Identity;} );
       ctl.logger().addLogEntry("MyMeasures_" + name + "_back_foot_x", [this, foot]() { return controller().targetContact().pose.translation().x() + landing_to_foot_middle_offset_ - foot_length_ * 0.5;} );
       ctl.logger().addLogEntry("MyMeasures_" + name + "_front_foot_x", [this, foot]() { return controller().targetContact().pose.translation().x() + landing_to_foot_middle_offset_ + foot_length_ * 0.5;} );
       ctl.logger().addLogEntry("MyMeasures_" + name + "_back_foot_z", [this, foot]() { return controller().targetContact().pose.translation().z();} );
@@ -581,6 +586,8 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
   bool X_0_ph_updated = false;
   // Keep in memory the current foot pose;  We need to enqueue only one time per run
   past_foot_pose_[current_moving_foot].enqueue(X_0_ph);
+  // For logging
+  past_foot_pose_control_[current_moving_foot].enqueue(ctl.robot().bodyPosW(body_of_sensor));
 
   // Select data/string based on current_moving_foot
   for(const auto & sensor_name: range_sensor_names_[current_moving_foot])
@@ -615,7 +622,7 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
 
       if(past_foot_pose_[current_moving_foot].full() || (past_foot_pose_[current_moving_foot].size() - delay_iterations) > 0)
       {
-        const int n_to_remove = past_foot_pose_[current_moving_foot].size() - delay_iterations;
+        const int n_to_remove = past_foot_pose_[current_moving_foot].size() - delay_iterations - 1;
         if(!controller().stabilizer_->inDoubleSupport() && debug_output_)
         {
           mc_rtc::log::info("[SoftFootState] We saved {} / {} foot pose and we need to go back of {} iterations.", past_foot_pose_[current_moving_foot].size(), past_foot_pose_[current_moving_foot].capacity(), delay_iterations);
@@ -626,6 +633,8 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
         for(int i = 0; i < n_to_remove; ++i)
         {
           past_foot_pose_[current_moving_foot].dequeue();
+          // For logging
+          past_foot_pose_control_[current_moving_foot].dequeue();
         }
 
         auto optionnal_X_0_ph = past_foot_pose_[current_moving_foot].dequeue();
@@ -646,6 +655,22 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
         const sva::PTransformd X_0_m = X_s_m * X_ph_s * X_0_ph;
         data.ground.push_back(X_0_m.translation());
         data.last_ground = data.ground.back();
+
+        {
+          X_0_ph.rotation() = Eigen::Matrix3d::Identity();
+          data.last_ground_Identity = (X_s_m * X_ph_s * X_0_ph).translation();
+        }
+
+        {
+          // For logging
+          auto optionnal_X_0_ph = past_foot_pose_control_[current_moving_foot].dequeue();
+          if(optionnal_X_0_ph.has_value())
+          {
+            X_0_ph = optionnal_X_0_ph.value();
+            data.last_ground_control = (X_s_m * X_ph_s * X_0_ph).translation();
+          }
+        }
+
 
         if(!controller().stabilizer_->inDoubleSupport() && debug_output_)
         {
@@ -1596,6 +1621,8 @@ void SoftFootState::reset(mc_control::fsm::Controller & ctl, const Foot & foot)
     ctl.logger().removeLogEntry("MyMeasures_" + name + "_" + range_sensor_name + "_range");
   }
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_ground");
+  ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_ground_control");
+  ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_ground_Identity");
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_back_foot_x");
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_front_foot_x");
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_back_foot_z");
