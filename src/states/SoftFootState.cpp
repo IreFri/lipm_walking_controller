@@ -271,10 +271,13 @@ void SoftFootState::runState()
 
   // Estimate ground from sensors
   {
-    auto start = std::chrono::high_resolution_clock::now();
-    estimateGround(ctl, current_moving_foot);
-    auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration<double, std::milli>(stop - start);
+    for(const auto & foot: {Foot::Right, Foot::Left})
+    {
+      auto start = std::chrono::high_resolution_clock::now();
+      estimateGround(ctl, foot);
+      auto stop = std::chrono::high_resolution_clock::now();
+      auto duration = std::chrono::duration<double, std::milli>(stop - start);
+    }
     if(debug_output_)
     {
       // It is spamming to much the terminal
@@ -341,7 +344,6 @@ void SoftFootState::runState()
             [](const Eigen::Vector3d & v) { return v.y(); });
           return d;
         });
-      ctl.logger().addLogEntry("MyMeasures_" + name + "_range", [this, foot]() { return foot_data_[foot].range;} );
       for(const auto & range_sensor_name: range_sensor_names_[foot])
       {
         ctl.logger().addLogEntry("MyMeasures_" + name + "_" + range_sensor_name + "_range", [this, foot, range_sensor_name]() { return range_sensor_data_[foot][range_sensor_name];} );
@@ -595,12 +597,11 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
     {
       // Update data.range
       range_sensor_data_[current_moving_foot][sensor_name] = range;
-      data.range = range;
 
       // Returns the transformation from the parent body to the sensor
       const sva::PTransformd& X_ph_s = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).X_p_s();
       // Get the range measured by the sensor
-      const sva::PTransformd X_s_m = sva::PTransformd(Eigen::Vector3d(0, 0, data.range));
+      const sva::PTransformd X_s_m = sva::PTransformd(Eigen::Vector3d(0, 0, range));
 
       size_t delay_iterations;
       if(fixed_delay_of_estimation_ != 0.)

@@ -202,7 +202,6 @@ protected:
   // FootData contains data used to estimate the ground profile
   struct FootData
   {
-    double range;
     std::vector<Eigen::Vector3d> ground;
     Eigen::Vector3d last_ground;
     std::vector<std::array<double, 2>> phalanxes;
