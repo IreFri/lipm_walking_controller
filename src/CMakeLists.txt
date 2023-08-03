@@ -86,6 +86,9 @@ target_link_libraries(RangeSensor PUBLIC mc_rtc::mc_control mc_mujoco::devices)
 target_link_libraries(RangeSensor PRIVATE CppLinuxSerial::CppLinuxSerial)
 target_link_libraries(RangeSensor PUBLIC Boost::filesystem)
 
+add_observer(CameraSensor observer/CameraSensor.cpp "${CMAKE_SOURCE_DIR}/include/lipm_walking/observer/CameraSensor.h")
+target_link_libraries(CameraSensor PUBLIC mc_rtc::mc_control mc_mujoco::devices realsense2)
+
 install(
   TARGETS ${PROJECT_NAME} CppLinuxSerial qhull_r qhullcpp
   EXPORT "${TARGETS_EXPORT_NAME}"

@@ -49,6 +49,8 @@ include(cmake/base.cmake)
 project(${PROJECT_NAME} LANGUAGES C CXX)
 
 add_project_dependency(copra REQUIRED)
+add_project_dependency(Ceres REQUIRED)
+add_project_dependency(realsense2 REQUIRED)
 add_project_dependency(mc_rtc REQUIRED)
 if(NOT TARGET mc_rtc::mc_rtc_ros)
   message(
@@ -83,6 +85,7 @@ add_subdirectory(3rd-party/serial EXCLUDE_FROM_ALL)
 add_subdirectory(plugins/ExternalFootstepPlanner)
 add_subdirectory(src)
 add_subdirectory(nano)
+add_subdirectory(camera)
 
 set(PACKAGE_EXTRA_MACROS
     "set(LIPM_WALKING_STATES_LIBRARIES \"${MC_CONTROLLER_INSTALL_PREFIX}/lipm_walking_controller_softfoot/states\")
