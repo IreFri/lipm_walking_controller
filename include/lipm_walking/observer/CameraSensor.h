@@ -72,13 +72,11 @@ protected:
 
   std::string path_to_replay_data_ = "";
 
-  size_t nr_extra_data_ = 0;
-
-  size_t nr_half_extra_data_ = 0;
-
   size_t kernel_size_ = 3;
 
   float kernel_threshold_ = 0.005f;
+
+  float outlier_threshold_ = 0.01f;
 
   //
   void startReadingCamera();

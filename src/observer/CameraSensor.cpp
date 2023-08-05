@@ -44,12 +44,6 @@ void CameraSensor::configure(const mc_control::MCController & ctl, const mc_rtc:
     path_to_preset_ = static_cast<std::string>(config("path_to_preset"));
   }
 
-  if(config.has("nr_extra_data"))
-  {
-    nr_extra_data_ = config("nr_extra_data");
-    nr_half_extra_data_ = static_cast<size_t>(static_cast<double>(nr_extra_data_) * 0.5);
-  }
-
   if(config.has("kernel_size"))
   {
     kernel_size_ = config("kernel_size");
@@ -62,8 +56,11 @@ void CameraSensor::configure(const mc_control::MCController & ctl, const mc_rtc:
     kernel_threshold_ = kernel_threshold_ < 0 ? 0.005f : kernel_threshold_;
   }
 
-  //
-  points_.resize(nr_extra_data_ + 1);
+  if(config.has("outlier_threshold"))
+  {
+    outlier_threshold_ = static_cast<float>(static_cast<double>(config("outlier_threshold")));
+    outlier_threshold_ = outlier_threshold_ < 0 ? 0.01f : outlier_threshold_;
+  }
 
   if(config.has("path_to_replay_data"))
   {
@@ -73,13 +70,13 @@ void CameraSensor::configure(const mc_control::MCController & ctl, const mc_rtc:
   mc_rtc::log::info("[CameraSensor::{}] 'sensor_name' is {}", name_, sensor_name_);
   mc_rtc::log::info("[CameraSensor::{}] 'camera_serial' is {}", name_, camera_serial_);
   mc_rtc::log::info("[CameraSensor::{}] 'path_to_preset' is {}", name_, path_to_preset_);
-  mc_rtc::log::info("[CameraSensor::{}] 'nr_extra_data' is {}", name_, nr_extra_data_);
   mc_rtc::log::info("[CameraSensor::{}] 'kernel_size' is {}", name_, kernel_size_);
   mc_rtc::log::info("[CameraSensor::{}] 'kernel_threshold' is {}", name_, kernel_threshold_);
+  mc_rtc::log::info("[CameraSensor::{}] 'outlier_threshold' is {}", name_, outlier_threshold_);
 
   startReadingCamera();
 
-  desc_ = fmt::format("{} (sensor_name={}, camera_serial={}, nr_extra_data={}, kernel_size={}, kernel_threshold={})", name_, sensor_name_, camera_serial_, nr_extra_data_, kernel_size_, kernel_threshold_);
+  desc_ = fmt::format("{} (sensor_name={}, camera_serial={}, kernel_size={}, kernel_threshold={}, outlier_threshold={})", name_, sensor_name_, camera_serial_, kernel_size_, kernel_threshold_, outlier_threshold_);
 }
 
 void CameraSensor::reset(const mc_control::MCController &)
@@ -108,24 +105,43 @@ void CameraSensor::addToLogger(const mc_control::MCController &,
                                    mc_rtc::Logger & logger,
                                    const std::string & category)
 {
-  logger.addLogEntry(category + "_range", [this]() -> double {
-    return points_[0].z();
-  });
-  for(size_t i = 0; i < nr_extra_data_ + 1; ++i)
+  logger.addLogEntry(category + "_range", [this]() -> double
   {
-    logger.addLogEntry(category + "_points_" + std::to_string(i), [this, i]() -> Eigen::Vector3d {
-      return points_[i];
-    });
-  }
+    const std::lock_guard<std::mutex> lock(mutex_);
+    return points_.empty() ? 0. : points_[0].z();
+  });
+  logger.addLogEntry(category + "_points_x", [this]() -> std::vector<double>
+  {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<double> d;
+    std::transform(points_.begin(), points_.end(), std::back_inserter(d),
+      [](const Eigen::Vector3d & v) { return v.x(); });
+    return d;
+  });
+  logger.addLogEntry(category + "_points_y", [this]() -> std::vector<double>
+  {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<double> d;
+    std::transform(points_.begin(), points_.end(), std::back_inserter(d),
+      [](const Eigen::Vector3d & v) { return v.y(); });
+    return d;
+  });
+  logger.addLogEntry(category + "_points_z", [this]() -> std::vector<double>
+  {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<double> d;
+    std::transform(points_.begin(), points_.end(), std::back_inserter(d),
+      [](const Eigen::Vector3d & v) { return v.z(); });
+    return d;
+  });
 }
 
 void CameraSensor::removeFromLogger(mc_rtc::Logger & logger, const std::string & category)
 {
   logger.removeLogEntry(category + "_range");
-  for(size_t i = 0; i < nr_extra_data_ + 1; ++i)
-  {
-    logger.removeLogEntry(category + "_points_" + std::to_string(i));
-  }
+  logger.removeLogEntry(category + "_points_x");
+  logger.removeLogEntry(category + "_points_y");
+  logger.removeLogEntry(category + "_points_z");
 }
 
 void CameraSensor::addToGUI(const mc_control::MCController & ctl,
@@ -136,12 +152,20 @@ void CameraSensor::addToGUI(const mc_control::MCController & ctl,
     mc_rtc::gui::Label("Range [m]",
       [this]()
       {
-        return points_[0].z();
+        const std::lock_guard<std::mutex> lock(mutex_);
+        return points_.empty() ? 0. : points_[0].z();
       }),
     mc_rtc::gui::Point3D("Point [3D]",
       [this]()
       {
-        return points_[0];
+        const std::lock_guard<std::mutex> lock(mutex_);
+        return points_.empty() ? Eigen::Vector3d::Zero() : points_[0];
+      }),
+    mc_rtc::gui::Label("nr points",
+      [this]()
+      {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        return points_.size();
       }),
     mc_rtc::gui::Transform(fmt::format("X_0_{}", name_),
       [this, &ctl]()
@@ -190,21 +214,45 @@ void CameraSensor::addToGUI(const mc_control::MCController & ctl,
 
   std::vector<std::string> points_category = category;
   points_category.push_back("points");
-  for(size_t i = 0; i < nr_extra_data_; ++i)
-  {
-    gui.addElement(points_category,
-      mc_rtc::gui::Point3D("Point_"+std::to_string(i),
-        [this, i]()
+  gui.addElement(points_category,
+    mc_rtc::gui::Trajectory("Points",
+      [this, &ctl]()
+      {
+        std::vector<Eigen::Vector3d> points;
         {
-          return points_[i];
-        })
-    );
-  }
+          const std::lock_guard<std::mutex> lock(mutex_);
+          points = points_;
+        }
+
+        if(points.empty())
+        {
+          return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
+        }
+
+        const std::string& body_of_sensor = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).parent();
+        // Access the position of body name in world coordinates (phalanx position)
+        sva::PTransformd X_0_ph = ctl.realRobot().bodyPosW(body_of_sensor);
+        // Returns the transformation from the parent body to the sensor
+        const sva::PTransformd& X_ph_s = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s();
+        // Keep the estimated 3d point for the ground
+        std::vector<Eigen::Vector3d> traj;
+        for(const auto& point: points)
+        {
+          const sva::PTransformd X_0_m = sva::PTransformd(point) * X_ph_s * X_0_ph;
+          traj.push_back(X_0_m.translation());
+        }
+        return traj;
+      })
+  );
 
   gui.addPlot(
     fmt::format("CameraSensor::{}", name_),
     mc_rtc::gui::plot::X("t", [this, &ctl]() { return t_; }),
-    mc_rtc::gui::plot::Y("range", [this]() { return points_[0].z(); }, mc_rtc::gui::Color::Red)
+    mc_rtc::gui::plot::Y("range", [this]()
+      { 
+        const std::lock_guard<std::mutex> lock(mutex_);
+        return points_.empty() ? 0. : points_[0].z();
+      }, mc_rtc::gui::Color::Red)
   );
 }
 
@@ -218,19 +266,6 @@ void CameraSensor::startReadingCamera()
   loop_sensor_ = std::thread(
     [this]()
     {
-      auto get_sensor_name = [](const rs2::sensor& sensor)
-      {
-        // Sensors support additional information, such as a human readable name
-        if (sensor.supports(RS2_CAMERA_INFO_NAME))
-        {
-          return sensor.get_info(RS2_CAMERA_INFO_NAME);
-        }
-        else
-        {
-          return "Unknown Sensor";
-        }
-      };
-
       rs2::config cfg;
       // Check if we read from a .bag or from a camera
       if(path_to_replay_data_ != "")
@@ -258,20 +293,12 @@ void CameraSensor::startReadingCamera()
         advanced.load_json(str);
       }
 
-      // Get intrinsics parameters
-      rs2::sensor sensor = pipe.get_active_profile().get_device().query_sensors()[0];
-      mc_rtc::log::info("[CameraSensor] Getting the intrisics parameters of {}", get_sensor_name(sensor));
-      rs2::stream_profile depth_stream_profile = sensor.get_stream_profiles()[0];
-      mc_rtc::log::info("[CameraSensor] It is a {} stream", depth_stream_profile.stream_type());
-      rs2_intrinsics intrinsics = depth_stream_profile.as<rs2::video_stream_profile>().get_intrinsics();
-
-      auto depthToPoint = [&intrinsics](const std::array<float, 2>& pixel, float depth) -> Eigen::Vector3d
+      auto depthToPoint = [](const rs2_intrinsics& intrinsics, const std::array<float, 2>& pixel, float depth) -> Eigen::Vector3d
       {
         Eigen::Vector3f point;
         rs2_deproject_pixel_to_point(point.data(), &intrinsics, pixel.data(), depth);
         return point.cast<double>();
       };
-
 
       auto applyKernel = [this](const std::array<float, 2>& pixel, const rs2::depth_frame& frame) -> float
       {
@@ -290,6 +317,10 @@ void CameraSensor::startReadingCamera()
               sum_depth += ddepth;
               counter += 1.f;
             }
+            if(std::abs(ddepth - pixel_depth) > outlier_threshold_)
+            {
+              return 0.f;
+            }
           }
         }
         return sum_depth / counter;
@@ -299,11 +330,11 @@ void CameraSensor::startReadingCamera()
       rs2::decimation_filter dec;
       // If the demo is too slow, make sure you run in Release (-DCMAKE_BUILD_TYPE=Release)
       // but you can also increase the following parameter to decimate depth more (reducing quality)
-      dec.set_option(RS2_OPTION_FILTER_MAGNITUDE, 2);
+      dec.set_option(RS2_OPTION_FILTER_MAGNITUDE, 4);
       // HDR Merge
       rs2::hdr_merge hdr;
       // Threshold filter
-      rs2::threshold_filter thresh(0.005f, 0.40f);
+      rs2::threshold_filter thresh(0.5f, 0.40f);
       // Define transformations from and to Disparity domain
       rs2::disparity_transform depth2disparity;
       // Define spatial filter (edge-preserving)
@@ -312,9 +343,8 @@ void CameraSensor::startReadingCamera()
       spat.set_option(RS2_OPTION_FILTER_SMOOTH_ALPHA, 0.5f);
       spat.set_option(RS2_OPTION_FILTER_SMOOTH_DELTA, 20.f);
       spat.set_option(RS2_OPTION_HOLES_FILL, 0);
-      //
       rs2::disparity_transform disparity2depth(false);
-
+      
       while(!stop_loop_.load())
       {
         auto frames = pipe.wait_for_frames();
@@ -328,53 +358,44 @@ void CameraSensor::startReadingCamera()
         frame = frame.apply_filter(spat);
         frame = frame.apply_filter(disparity2depth);
 
+        rs2_intrinsics intrinsics = frame.get_profile().as<rs2::video_stream_profile>().get_intrinsics();
+
         const size_t height = frame.get_height();
         const size_t width = frame.get_width();
 
         const size_t half_height = static_cast<size_t>(static_cast<double>(height) * 0.5);
         const size_t half_width = static_cast<size_t>(static_cast<double>(width) * 0.5);
 
+
+        std::array<float, 2> pixel;
+        const int half_kernel_size = static_cast<int>(kernel_size_/2);
+        std::vector<Eigen::Vector3d> points;
+        for(size_t i = half_width; i < width - half_kernel_size; ++i)
         {
-          const std::array<float, 2> pixel = {static_cast<float>(half_width), static_cast<float>(half_height)};
-          // Handle the center
+          pixel[0] = static_cast<float>(i);
+          pixel[1] = static_cast<float>(half_height);
+
           const float depth = applyKernel(pixel, frame);
-          const Eigen::Vector3d point = depthToPoint(pixel, depth);
+          const Eigen::Vector3d point = depthToPoint(intrinsics, pixel, depth);
+          if(point.z() != 0)
           {
-            const std::lock_guard<std::mutex> lock(mutex_);
-            points_[0] = point;
-          }
-        }
-
-        // Handle the lower part
-        {
-          std::array<float, 2> pixel = {static_cast<float>(half_width), 0.f};
-          for(size_t i = 0; i < nr_half_extra_data_; ++i)
-          {
-            pixel[1] = static_cast<float>(half_height - i - 1);
-
-            const float depth = applyKernel(pixel, frame);
-            const Eigen::Vector3d point = depthToPoint(pixel, depth);
+            if(points.empty())
             {
-              const std::lock_guard<std::mutex> lock(mutex_);
-              points_[i + 1] = point;
+              points.push_back(point);
+              // mc_rtc::log::error("{} {} {}", point.x(), point.y(), point.z());
+            }
+            // Add a post check for noisy data
+            else if((points[i] - points[i-1]).norm() < 0.03)
+            {
+              points.push_back(point);
+              // mc_rtc::log::info("{} {} {}", point.x(), point.y(), point.z());
             }
           }
         }
 
-        // Handle the upper part
         {
-          std::array<float, 2> pixel = {static_cast<float>(half_width), 0.f};
-          for(size_t i = 0; i < nr_half_extra_data_; ++i)
-          {
-            pixel[1] = static_cast<float>(half_height + i + 1);
-
-            const float depth = applyKernel(pixel, frame);
-            const Eigen::Vector3d point = depthToPoint(pixel, depth);
-            {
-              const std::lock_guard<std::mutex> lock(mutex_);
-              points_[i + 1 + nr_half_extra_data_] = point;
-            }
-          }
+          const std::lock_guard<std::mutex> lock(mutex_);
+          points_ = points;
         }
 
         // Needs to update

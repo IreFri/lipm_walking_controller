@@ -1381,19 +1381,29 @@ ObserverPipelines:
           maxAnchorFrameDiscontinuity: 0.02
     - type: BodySensor
       update: false
-    - type: RangeSensor
-      name: LeftRangeSensor
+    # - type: RangeSensor
+    #   name: LeftRangeSensor
+    #   gui: true
+    #   config:
+    #     range_sensor_top: "LeftFootRangeSensor"
+    #     range_sensor_bot: "LeftFootRangeSensor"
+    #     serial_port: "/dev/ttyACM1"
+    #     baudrate: B115200
+    # - type: RangeSensor
+    #   name: RightRangeSensor
+    #   gui: true
+    #   config:
+    #     range_sensor_top: "RightFootRangeSensor"
+    #     range_sensor_bot: "RightFootRangeSensor"
+    #     serial_port: "/dev/ttyUSB1"
+    #     baudrate: B115200
+    - type: CameraSensor
+      name: CameraLeft
       gui: true
       config:
-        range_sensor_top: "LeftFootRangeSensor::Top"
-        range_sensor_bot: "LeftFootRangeSensor::Bot"
-        serial_port: "/dev/ttyACM1"
-        baudrate: B115200
-    - type: RangeSensor
-      name: RightRangeSensor
-      gui: true
-      config:
-        range_sensor_top: "RightFootRangeSensor::Top"
-        range_sensor_bot: "RightFootRangeSensor::Bot"
-        serial_port: "/dev/ttyUSB1"
-        baudrate: B115200
+        camera_serial: 230322275639
+        sensor_name: LeftFootCameraSensor
+        path_to_preset: "/home/jrluser/my_workspace/controller/lipm_walking_controller_softfoot/etc/D405_ShortRangePreset.JSON"
+        kernel_size: 5
+        kernel_threshold: 0.005
+        outlier_threshold: 0.01
