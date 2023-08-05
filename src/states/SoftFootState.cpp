@@ -66,6 +66,7 @@ void SoftFootState::start()
 
   nr_phalanxes_ = config_("nr_phalanx", 10);
   phalanx_length_ = foot_length_ / static_cast<double>(nr_phalanxes_);
+  use_camera_sensor_ = config_("use_camera_sensor", false);
 
   range_sensor_names_[Foot::Left] = config_("range_sensors")("left_foot");
   for(const auto & range_sensor_name: range_sensor_names_[Foot::Left])
@@ -99,6 +100,7 @@ void SoftFootState::start()
 
 
   // Display configuration
+  mc_rtc::log::info("[SoftFootState] use_camera_sensor is set to {}", use_camera_sensor_);
   mc_rtc::log::info("[SoftFootState] nr_phalanxes is set to {}", nr_phalanxes_);
   mc_rtc::log::info("[SoftFootState] phalanx_length is set to {}", phalanx_length_);
   mc_rtc::log::info("[SoftFootState] with_variable_stiffness is set to {}", with_variable_stiffness_);
@@ -607,9 +609,6 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
 
       // Returns the transformation from the parent body to the sensor
       const sva::PTransformd& X_ph_s = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).X_p_s();
-      // Get the range measured by the sensor
-      const sva::PTransformd X_s_m = sva::PTransformd(Eigen::Vector3d(0, 0, range));
-
       size_t delay_iterations;
       if(fixed_delay_of_estimation_ != 0.)
       {
@@ -629,6 +628,7 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
           mc_rtc::log::info("[SoftFootState] We will remove {} elements.", n_to_remove);
           mc_rtc::log::warning("[SoftFootState] Please ensure that past_foot_pose_ is not full i.e size {} < capacity {}", past_foot_pose_[current_moving_foot].size(), past_foot_pose_[current_moving_foot].capacity());
         }
+
         // Dequeue
         for(int i = 0; i < n_to_remove; ++i)
         {
@@ -651,10 +651,42 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
           return;
         }
 
+        sva::PTransformd X_s_m, X_0_m;
         // Keep the estimated 3d point for the ground
-        const sva::PTransformd X_0_m = X_s_m * X_ph_s * X_0_ph;
-        data.ground.push_back(X_0_m.translation());
-        data.last_ground = data.ground.back();
+        if(!use_camera_sensor_)
+        {
+          const sva::PTransformd X_s_r = sva::PTransformd(Eigen::Vector3d(0, 0, range));
+          X_s_m = X_s_r;
+          const sva::PTransformd X_0_r = X_s_r * X_ph_s * X_0_ph;
+          X_0_m = X_0_r;
+          data.ground.push_back(X_0_r.translation());
+          data.last_ground = data.ground.back();
+        }
+        else // Using camera sensor
+        {
+          const std::vector<Eigen::Vector3d> points = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name).points();
+          // mc_rtc::log::warning("SoftFootState] {} : {}", sensor_name, points.size());
+          if(points.empty())
+          {
+            continue;
+          }
+          // Handle extra data
+          for(size_t i = 0; i < points.size(); ++i)
+          {
+            if(points[i] != Eigen::Vector3d::Zero())
+            {
+              const sva::PTransformd X_s_p(points[i]);
+              X_s_m = X_s_p;
+              const sva::PTransformd X_0_p = X_s_p * X_ph_s * X_0_ph;
+              X_0_m = X_0_p;
+              data.ground.push_back(X_0_p.translation());
+              if(i == 0)
+              {
+                data.last_ground = data.ground.back();
+              }
+            }
+          }
+        }
 
         {
           X_0_ph.rotation() = Eigen::Matrix3d::Identity();
@@ -671,7 +703,6 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
           }
         }
 
-
         if(!controller().stabilizer_->inDoubleSupport() && debug_output_)
         {
           mc_rtc::log::info("[SoftFootState] The estimation of ground altitude is {} [m]", X_0_m.translation().z());
@@ -684,11 +715,31 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
           }
         );
 
-        if(data.ground.size() > 300)
+        if(data.ground.size() > 500)
         {
-          mc_rtc::log::warning("[SoftFootState] ground size for {} foot is superior to 300; we reduce it to 100 by removing the 200 first values.", current_moving_foot == Foot::Left ? "Left" : "Right");
-          data.ground.erase(data.ground.begin(), data.ground.begin() + 100);
-          mc_rtc::log::warning("[SoftFootState] After erasing, the size of ground is {}", data.ground.size());
+          const auto& ground = data.ground;
+
+          std::vector<Eigen::Vector3d> new_ground;
+          for(size_t i = 0; i < ground.size() - 1; ++i)
+          {
+            const Eigen::Vector3d& p = ground[i];
+            Eigen::Vector3d sum = p;
+            size_t j = i + 1;
+            while(j < ground.size() && (p.x() - ground[j].x()) < 0.00025)
+            {
+              sum += ground[j];
+              ++ j;
+            }
+            new_ground.push_back(sum / static_cast<double>(j - i));
+            i += j;
+          }
+
+          data.ground = new_ground;
+
+          // if(debug_output_)
+          {
+            mc_rtc::log::warning("[SoftFootState] After erasing, the size of ground is {}", data.ground.size());
+          }
         }
       }
 
@@ -1384,7 +1435,7 @@ void SoftFootState::computeFootLandingPosition(const Foot & current_moving_foot,
           previous_diff_y = diff_y;
         }
       }
-      std::cout << "nr contact points found " << contact_points.size() << std::endl;
+      // std::cout << "nr contact points found " << contact_points.size() << std::endl;
       // distance_between_phalanxes = TODO do something here to compute something
     }
 
@@ -1523,7 +1574,7 @@ void SoftFootState::computeFootLandingAngle(const Foot & current_moving_foot, co
   // foot_data_[current_moving_foot].position_offset_z = p_1.z();
 }
 
-void SoftFootState::updateFootSwingPose(mc_control::fsm::Controller & ctl, const Foot & current_moving_foot, const sva::PTransformd & X_0_landing)
+void SoftFootState::updateFootSwingPose(mc_control::fsm::Controller & ctl, const Foot & current_moving_foot, const sva::PTransformd &)
 {
   auto & ctrl = controller();
   // Get the angle

@@ -266,6 +266,7 @@ protected:
   bool with_variable_stiffness_ = false;
   bool with_ankle_rotation_ = false;
   bool with_foot_adjustment_ = false;
+  bool use_camera_sensor_ = false;
 
   // Subscriber to update the range sensor
   ros::Subscriber right_foot_range_sensor_sub_;

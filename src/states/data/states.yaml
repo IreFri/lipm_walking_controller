@@ -15,6 +15,7 @@ LIPMWalking::SoftFoot::Configured:
   with_variable_stiffness: false
   with_ankle_rotation: false
   with_foot_adjustment: false
+  use_camera_sensor: true
   nr_phalanx: 1
   range_sensors:
     left_foot: ["LeftFootRangeSensor::Top", "LeftFootRangeSensor::Bot"]
