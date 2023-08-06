@@ -18,7 +18,7 @@ LIPMWalking::SoftFoot::Configured:
   use_camera_sensor: true
   nr_phalanx: 1
   range_sensors:
-    left_foot: ["LeftFootRangeSensor::Top", "LeftFootRangeSensor::Bot"]
+    left_foot: ["LeftFootCameraSensor"]
     right_foot: ["RightFootRangeSensor::Top", "RightFootRangeSensor::Bot"]
 
 LIPMWalking::WalkFSMWithSoftFootState:

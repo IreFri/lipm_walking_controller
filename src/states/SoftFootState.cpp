@@ -725,18 +725,19 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
             const Eigen::Vector3d& p = ground[i];
             Eigen::Vector3d sum = p;
             size_t j = i + 1;
-            while(j < ground.size() && (p.x() - ground[j].x()) < 0.00025)
+            while(j < ground.size() && std::abs(ground[j].x() - p.x()) < 0.0025)
             {
               sum += ground[j];
               ++ j;
             }
             new_ground.push_back(sum / static_cast<double>(j - i));
-            i += j;
+            i = j - 1;
           }
+          new_ground.push_back(ground.back());
 
           data.ground = new_ground;
 
-          // if(debug_output_)
+          if(debug_output_)
           {
             mc_rtc::log::warning("[SoftFootState] After erasing, the size of ground is {}", data.ground.size());
           }

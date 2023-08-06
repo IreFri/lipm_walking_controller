@@ -35,14 +35,14 @@ try
   glfw_state filtered_view_orientation{};
   glfw_state side_view_orientation{};
 
-  filtered_view_orientation.yaw = -25.;
-  filtered_view_orientation.pitch = +5.;
+  filtered_view_orientation.yaw = 0; // -25
+  filtered_view_orientation.pitch = 0; // +5
 
-  original_view_orientation.yaw = -25.;
-  original_view_orientation.pitch = +5.;
+  original_view_orientation.yaw = 0; // -25
+  original_view_orientation.pitch = 0; // +5
 
-  side_view_orientation.yaw = 75.;
-  side_view_orientation.pitch = -15.;
+  side_view_orientation.yaw = 75.; // 75.
+  side_view_orientation.pitch = -15.; // -15.
 
   // Declare pointcloud objects, for calculating pointclouds and texture mappings
   rs2::pointcloud original_pc;
@@ -54,9 +54,9 @@ try
   // Use a configuration object to request only depth from the pipeline
   // cfg.enable_stream(RS2_STREAM_DEPTH, 848, 480, RS2_FORMAT_Z16, 30);
   // std::string serial = "230322275639";
-  std::string serial = "230422273358";
-  cfg.enable_device(serial);
-  std::string cfg_path = "/home/chappellet/Workspaces/mc/src/lipm_walking_controller/etc/D405_ShortRangePreset.JSON";
+  // std::string serial = "230422273358";
+  // cfg.enable_device(serial);
+  std::string cfg_path = "/home/jrluser/my_workspace/controller/lipm_walking_controller_softfoot/etc/D405_ShortRangePreset.JSON";
   // Start streaming with the above configuration
   // pipe.start(cfg);
   auto prof = pipe.start(cfg);
@@ -67,12 +67,12 @@ try
   auto advanced = dev.as<rs400::advanced_mode>();
   advanced.load_json(str);
 
-  intrinsics.width /= 4.f;     /**< Width of the image in pixels */
-  intrinsics.height /= 4.f;    /**< Height of the image in pixels */
-  intrinsics.ppx /= 4.f;       /**< Horizontal coordinate of the principal point of the image, as a pixel offset from the left edge */
-  intrinsics.ppy /= 4.f;       /**< Vertical coordinate of the principal point of the image, as a pixel offset from the top edge */
-  intrinsics.fx /= 4.f;        /**< Focal length of the image plane, as a multiple of pixel width */
-  intrinsics.fy /= 4.f;        /**< Focal length of the image plane, as a multiple of pixel height */
+  // intrinsics.width /= 4.f;     /**< Width of the image in pixels */
+  // intrinsics.height /= 4.f;    /**< Height of the image in pixels */
+  // intrinsics.ppx /= 4.f;       /**< Horizontal coordinate of the principal point of the image, as a pixel offset from the left edge */
+  // intrinsics.ppy /= 4.f;       /**< Vertical coordinate of the principal point of the image, as a pixel offset from the top edge */
+  // intrinsics.fx /= 4.f;        /**< Focal length of the image plane, as a multiple of pixel width */
+  // intrinsics.fy /= 4.f;        /**< Focal length of the image plane, as a multiple of pixel height */
 
   // Declare filters
   rs2::decimation_filter dec;
@@ -253,6 +253,7 @@ void update_data_and_compute(rs2::frame_queue & data,
   size_t kernel_size_ = 5;
   const int half_kernel_size = static_cast<int>(kernel_size_/2);
   float kernel_threshold_ = 0.005f;
+  float outlier_threshold_ = 0.01f;
 
   auto applyKernel = [&](const std::array<float, 2>& pixel, const rs2::depth_frame& frame) -> float
   {
@@ -269,6 +270,10 @@ void update_data_and_compute(rs2::frame_queue & data,
         {
           sum_depth += ddepth;
           counter += 1.f;
+        }
+        if(std::abs(ddepth - pixel_depth) > outlier_threshold_)
+        {
+          return 0.f;
         }
       }
     }
@@ -296,7 +301,8 @@ void update_data_and_compute(rs2::frame_queue & data,
     const size_t half_width = static_cast<size_t>(static_cast<double>(width) * 0.5);
 
     std::array<float, 2> pixel;
-    for(size_t i = half_kernel_size; i < width - half_kernel_size; ++i)
+    size_t offset = 0;
+    for(size_t i = half_kernel_size - offset; i < width - half_kernel_size - offset; ++i)
     {
       pixel[0] = static_cast<float>(i);
       pixel[1] = static_cast<float>(half_height);

@@ -96,7 +96,10 @@ void CameraSensor::update(mc_control::MCController & ctl)
   if(new_data_.load())
   {
     const std::lock_guard<std::mutex> lock(mutex_);
-    ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).update(points_, 0.);
+    if(!points_.empty())
+    {
+      ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).update(points_, 0.);
+    }
     new_data_ = false;
   }
 }
@@ -317,14 +320,26 @@ void CameraSensor::startReadingCamera()
               sum_depth += ddepth;
               counter += 1.f;
             }
-            if(std::abs(ddepth - pixel_depth) > outlier_threshold_)
-            {
-              return 0.f;
-            }
           }
         }
         return sum_depth / counter;
       };
+
+      auto generateStatistics = [](double& mean, double& variance, double& stddev, const std::vector<double>& distances)
+      {
+        // Estimate the mean and the standard deviation of the distance vector
+        double sum = 0, sq_sum = 0;
+        for (const float &distance : distances)
+        {
+          sum += distance;
+          sq_sum += distance * distance;
+        }
+
+        mean = sum / static_cast<double>(distances.size());
+        variance = (sq_sum - sum * sum / static_cast<double>(distances.size())) / (static_cast<double>(distances.size()) - 1);
+        stddev = sqrt (variance);
+      };
+
 
       // Decimation filter reduces the amount of data (while preserving best samples)
       rs2::decimation_filter dec;
@@ -370,7 +385,8 @@ void CameraSensor::startReadingCamera()
         std::array<float, 2> pixel;
         const int half_kernel_size = static_cast<int>(kernel_size_/2);
         std::vector<Eigen::Vector3d> points;
-        for(size_t i = half_width; i < width - half_kernel_size; ++i)
+        const size_t offset = 0;
+        for(size_t i = half_kernel_size - offset; i < width - half_kernel_size - offset; ++i)
         {
           pixel[0] = static_cast<float>(i);
           pixel[1] = static_cast<float>(half_height);
@@ -379,23 +395,81 @@ void CameraSensor::startReadingCamera()
           const Eigen::Vector3d point = depthToPoint(intrinsics, pixel, depth);
           if(point.z() != 0)
           {
-            if(points.empty())
-            {
-              points.push_back(point);
-              // mc_rtc::log::error("{} {} {}", point.x(), point.y(), point.z());
-            }
-            // Add a post check for noisy data
-            else if((points[i] - points[i-1]).norm() < 0.03)
-            {
-              points.push_back(point);
-              // mc_rtc::log::info("{} {} {}", point.x(), point.y(), point.z());
-            }
+            points.push_back(point);
+          }
+        }
+
+        // Group points
+        std::vector<std::vector<Eigen::Vector3d>> points_group;
+        points_group.push_back(std::vector<Eigen::Vector3d>());
+        for(int i = 0; i < static_cast<int>(points.size()) - 1; ++i)
+        {
+          if((points[i] - points[i+1]).norm() > 0.01)
+          {
+            points_group.push_back(std::vector<Eigen::Vector3d>());
+          }
+          points_group.back().push_back(points[i]);
+        }
+        if(!points.empty())
+        {
+          points_group.back().push_back(points.back());
+        }
+
+        std::vector<Eigen::Vector3d> only_big_group;
+        for(const auto& group: points_group)
+        {
+          if(group.size() > 10)
+          {
+            only_big_group.insert(only_big_group.end(), group.begin(), group.end());
+          }
+        }
+        points = only_big_group;
+
+
+        // Statistical outlier removal
+        int mean_k = 3;
+        double std_mul = 0.0;
+        std::vector<double> distances(points.size());
+        std::vector<double> inner_distances(points.size());
+        for(size_t i = 0; i < points.size(); ++i)
+        {
+          const auto& p = points[i];
+          for(size_t j = 0; j < points.size(); ++j)
+          {
+            inner_distances[j] = (points[j] - p).norm();
+          }
+          std::sort(inner_distances.begin(), inner_distances.end());
+
+          // Minimum distance (if mean_k_ == 2) or mean distance
+          double dist_sum = 0;
+          for (int j = 1; j < mean_k; ++j)
+          {
+            dist_sum += inner_distances[j];
+          }
+          distances[i] = static_cast<float> (dist_sum / (mean_k - 1));
+        }
+
+        double mean;
+        double variance;
+        double stddev;
+        generateStatistics(mean, variance, stddev, distances);
+        double const distance_threshold = mean + std_mul * stddev; // a distance that is bigger than this signals an outlier
+        // Second pass: Classify the points on the computed distance threshold
+        std::vector<Eigen::Vector3d> filtered_points;
+        for (std::size_t cp = 0; cp < points.size(); ++cp)
+        {
+          // Points having a too high average distance are outliers and are passed to removed indices
+          // Unless negative was set, then it's the opposite condition
+          if (distances[cp] <= distance_threshold)
+          {
+            filtered_points.push_back(points[cp]);
           }
         }
 
         {
           const std::lock_guard<std::mutex> lock(mutex_);
-          points_ = points;
+          // points_ = points;
+          points_ = filtered_points;
         }
 
         // Needs to update
