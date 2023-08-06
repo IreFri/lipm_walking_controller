@@ -335,6 +335,11 @@ int main(int argc, char * argv[])
   LogExplorer appli(log_path, mod, dt);
   appli.setupTimeSection(time_section_name);
 
+  std::vector<double> previous_points_x;
+  std::vector<double> previous_points_y;
+  std::vector<double> previous_points_z;
+  sva::PTransformd X_0_s;
+
   while(true)
   {
     if(!appli.run())
@@ -346,15 +351,12 @@ int main(int argc, char * argv[])
     const auto& log = appli.log();
     const auto& cur_i = appli.cur_i();
 
-    static std::vector<double> previous_points_x;
-    static std::vector<double> previous_points_y;
-    static std::vector<double> previous_points_z;
-    static sva::PTransformd X_0_s;
-
+    // Read the log
     std::vector<double> points_x = log.get<std::vector<double>>("Observers_LIPMWalkingObserverPipeline_CameraLeft_points_x", cur_i, {});
     std::vector<double> points_y = log.get<std::vector<double>>("Observers_LIPMWalkingObserverPipeline_CameraLeft_points_y", cur_i, {});
     std::vector<double> points_z = log.get<std::vector<double>>("Observers_LIPMWalkingObserverPipeline_CameraLeft_points_z", cur_i, {});
 
+    // Initialize previous points
     if(previous_points_x.empty() || points_x.empty())
     {
       previous_points_x = points_x;
@@ -363,6 +365,7 @@ int main(int argc, char * argv[])
       continue;
     }
 
+    // Check if new data
     if(previous_points_x.front() != points_x.front())
     {
       const std::string& body_of_sensor = robot.device<mc_mujoco::RangeSensor>("RightFootCameraSensor").parent();
@@ -373,22 +376,25 @@ int main(int argc, char * argv[])
       //
       if(log.get<sva::ForceVecd>("RightFootForceSensor", cur_i, sva::ForceVecd::Zero()).force().z() < 20)
       {
-        // Nothing to do
-        X_ph_s.rotation() *= mc_rbdyn::rpyToMat(0., 2 * M_PI / 180., 0.);
+
       }
       else
       {
-        // We are in Support and we cancel the rotation of the foot
+        // We are in Support and we cancel the rotation of the foot !
+        // TODO: Need to add this to the controller to in SoftFootState.cpp
         X_0_ph.rotation() = Eigen::Matrix3d::Identity();
       }
-      // Keep the estimated 3d point for the ground
+
+      // Keep the sensor pose when we receive a new set of data
       X_0_s = X_ph_s * X_0_ph;
     }
 
+    // Compute the 3D point in world frame
     points.clear();
     for(size_t i = 0; i < points_x.size(); ++i)
     {
       Eigen::Vector3d pos(points_x[i], points_y[i], points_z[i]);
+      // From camera frame to world frame
       const sva::PTransformd X_0_m = sva::PTransformd(pos) * X_0_s;
       points.push_back(X_0_m.translation());
     }
