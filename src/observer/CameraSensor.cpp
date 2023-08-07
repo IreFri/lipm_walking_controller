@@ -385,7 +385,7 @@ void CameraSensor::startReadingCamera()
         std::array<float, 2> pixel;
         const int half_kernel_size = static_cast<int>(kernel_size_/2);
         std::vector<Eigen::Vector3d> points;
-        const size_t offset = 0;
+        const size_t offset = 110;
         for(size_t i = half_kernel_size - offset; i < width - half_kernel_size - offset; ++i)
         {
           pixel[0] = static_cast<float>(i);
