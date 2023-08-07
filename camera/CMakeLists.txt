@@ -5,3 +5,6 @@ target_link_libraries(test_0_camera PRIVATE mc_rtc::mc_rtc_gui mc_rtc::mc_contro
 find_package(OpenGL REQUIRED)
 add_executable(test_1_camera test_1.cpp)
 target_link_libraries(test_1_camera PRIVATE mc_rtc::mc_rtc_gui mc_rtc::mc_control realsense2 glfw ${OPENGL_LIBRARIES})
+
+add_executable(re-export_log re_export_log.cpp)
+target_link_libraries(re-export_log PRIVATE mc_rtc::mc_rtc_gui mc_rtc::mc_control mc_mujoco::devices)
