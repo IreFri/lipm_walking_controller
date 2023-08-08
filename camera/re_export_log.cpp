@@ -297,37 +297,65 @@ int main(int argc, char * argv[])
   double dt = 0.005;
 
   // What do we want to compute
-  std::vector<Eigen::Vector3d> points;
+  std::vector<Eigen::Vector3d> left_points;
+  std::vector<Eigen::Vector3d> right_points;
 
   // Define what we want to log
   using Policy = mc_rtc::Logger::Policy;
-  mc_rtc::Logger logger(Policy::THREADED, "/tmp", "export");
+  mc_rtc::Logger logger(Policy::THREADED, "/home/jrluser/Desktop/Logs/Export", "export");
   logger.start("data", dt);
 
-  logger.addLogEntry("points_x",
-    [&points]
+  logger.addLogEntry("left_points_x",
+    [&left_points]
     {
       std::vector<double> x;
-      std::transform(points.begin(), points.end(), std::back_inserter(x),
-        [](const Eigen::Vector3d & p) { return p.x(); });
+      std::transform(left_points.begin(), left_points.end(), std::back_inserter(x),
+        [](const Eigen::Vector3d & left_p) { return left_p.x(); });
       return x;
     });
 
-  logger.addLogEntry("points_y",
-    [&points]
+  logger.addLogEntry("left_points_y",
+    [&left_points]
     {
       std::vector<double> y;
-      std::transform(points.begin(), points.end(), std::back_inserter(y),
-        [](const Eigen::Vector3d & p) { return p.y(); });
+      std::transform(left_points.begin(), left_points.end(), std::back_inserter(y),
+        [](const Eigen::Vector3d & left_p) { return left_p.y(); });
       return y;
     });
 
-  logger.addLogEntry("points_z",
-    [&points]
+  logger.addLogEntry("left_points_z",
+    [&left_points]
     {
       std::vector<double> z;
-      std::transform(points.begin(), points.end(), std::back_inserter(z),
-        [](const Eigen::Vector3d & p) { return p.z(); });
+      std::transform(left_points.begin(), left_points.end(), std::back_inserter(z),
+        [](const Eigen::Vector3d & left_p) { return left_p.z(); });
+      return z;
+    });
+
+  logger.addLogEntry("right_points_x",
+    [&right_points]
+    {
+      std::vector<double> x;
+      std::transform(right_points.begin(), right_points.end(), std::back_inserter(x),
+        [](const Eigen::Vector3d & right_p) { return right_p.x(); });
+      return x;
+    });
+
+  logger.addLogEntry("right_points_y",
+    [&right_points]
+    {
+      std::vector<double> y;
+      std::transform(right_points.begin(), right_points.end(), std::back_inserter(y),
+        [](const Eigen::Vector3d & right_p) { return right_p.y(); });
+      return y;
+    });
+
+  logger.addLogEntry("right_points_z",
+    [&right_points]
+    {
+      std::vector<double> z;
+      std::transform(right_points.begin(), right_points.end(), std::back_inserter(z),
+        [](const Eigen::Vector3d & right_p) { return right_p.z(); });
       return z;
     });
 
@@ -335,10 +363,15 @@ int main(int argc, char * argv[])
   LogExplorer appli(log_path, mod, dt);
   appli.setupTimeSection(time_section_name);
 
-  std::vector<double> previous_points_x;
-  std::vector<double> previous_points_y;
-  std::vector<double> previous_points_z;
-  sva::PTransformd X_0_s;
+  std::vector<double> left_previous_points_x;
+  std::vector<double> left_previous_points_y;
+  std::vector<double> left_previous_points_z;
+  sva::PTransformd left_X_0_s;
+
+  std::vector<double> right_previous_points_x;
+  std::vector<double> right_previous_points_y;
+  std::vector<double> right_previous_points_z;
+  sva::PTransformd right_X_0_s;
 
   while(true)
   {
@@ -352,27 +385,78 @@ int main(int argc, char * argv[])
     const auto& cur_i = appli.cur_i();
 
     // Read the log
-    std::vector<double> points_x = log.get<std::vector<double>>("Observers_LIPMWalkingObserverPipeline_CameraLeft_points_x", cur_i, {});
-    std::vector<double> points_y = log.get<std::vector<double>>("Observers_LIPMWalkingObserverPipeline_CameraLeft_points_y", cur_i, {});
-    std::vector<double> points_z = log.get<std::vector<double>>("Observers_LIPMWalkingObserverPipeline_CameraLeft_points_z", cur_i, {});
+    std::vector<double> left_points_x = log.get<std::vector<double>>("Observers_LIPMWalkingObserverPipeline_CameraLeft_points_x", cur_i, {});
+    std::vector<double> left_points_y = log.get<std::vector<double>>("Observers_LIPMWalkingObserverPipeline_CameraLeft_points_y", cur_i, {});
+    std::vector<double> left_points_z = log.get<std::vector<double>>("Observers_LIPMWalkingObserverPipeline_CameraLeft_points_z", cur_i, {});
 
+    std::vector<double> right_points_x = log.get<std::vector<double>>("Observers_LIPMWalkingObserverPipeline_CameraRight_points_x", cur_i, {});
+    std::vector<double> right_points_y = log.get<std::vector<double>>("Observers_LIPMWalkingObserverPipeline_CameraRight_points_y", cur_i, {});
+    std::vector<double> right_points_z = log.get<std::vector<double>>("Observers_LIPMWalkingObserverPipeline_CameraRight_points_z", cur_i, {});
+
+
+    // LEFT FOOT
     // Initialize previous points
-    if(previous_points_x.empty() || points_x.empty())
+    if(left_previous_points_x.empty() || left_points_x.empty())
     {
-      previous_points_x = points_x;
-      previous_points_y = points_y;
-      previous_points_z = points_z;
+      left_previous_points_x = left_points_x;
+      left_previous_points_y = left_points_y;
+      left_previous_points_z = left_points_z;
       continue;
     }
 
     // Check if new data
-    if(previous_points_x.front() != points_x.front())
+    if(left_previous_points_x.front() != left_points_x.front())
     {
-      const std::string& body_of_sensor = robot.device<mc_mujoco::RangeSensor>("RightFootCameraSensor").parent();
+      const std::string& left_body_of_sensor = robot.device<mc_mujoco::RangeSensor>("LeftFootCameraSensor").parent();
       // Access the position of body name in world coordinates (phalanx position)
-      sva::PTransformd X_0_ph = robot.bodyPosW(body_of_sensor);
+      sva::PTransformd left_X_0_ph = robot.bodyPosW(left_body_of_sensor);
       // Returns the transformation from the parent body to the sensor
-      sva::PTransformd X_ph_s = robot.device<mc_mujoco::RangeSensor>("RightFootCameraSensor").X_p_s();
+      sva::PTransformd left_X_ph_s = robot.device<mc_mujoco::RangeSensor>("LeftFootCameraSensor").X_p_s();
+      //
+      if(log.get<sva::ForceVecd>("LeftFootForceSensor", cur_i, sva::ForceVecd::Zero()).force().z() < 20)
+      {
+
+      }
+      else
+      {
+        // We are in Support and we cancel the rotation of the foot !
+        // TODO: Need to add this to the controller to in SoftFootState.cpp
+        left_X_0_ph.rotation() = Eigen::Matrix3d::Identity();
+      }
+
+      // Keep the sensor pose when we receive a new set of data
+      left_X_0_s = left_X_ph_s * left_X_0_ph;
+    }
+
+    // Compute the 3D point in world frame
+    left_points.clear();
+    for(size_t i = 0; i < left_points_x.size(); ++i)
+    {
+      Eigen::Vector3d left_pos(left_points_x[i], left_points_y[i], left_points_z[i]);
+      // From camera frame to world frame
+      const sva::PTransformd left_X_0_m = sva::PTransformd(left_pos) * left_X_0_s;
+      left_points.push_back(left_X_0_m.translation());
+    }
+
+
+    // RIGHT FOOT
+    // Initialize previous points
+    if(right_previous_points_x.empty() || right_points_x.empty())
+    {
+      right_previous_points_x = right_points_x;
+      right_previous_points_y = right_points_y;
+      right_previous_points_z = right_points_z;
+      continue;
+    }
+
+    // Check if new data
+    if(right_previous_points_x.front() != right_points_x.front())
+    {
+      const std::string& right_body_of_sensor = robot.device<mc_mujoco::RangeSensor>("RightFootCameraSensor").parent();
+      // Access the position of body name in world coordinates (phalanx position)
+      sva::PTransformd right_X_0_ph = robot.bodyPosW(right_body_of_sensor);
+      // Returns the transformation from the parent body to the sensor
+      sva::PTransformd right_X_ph_s = robot.device<mc_mujoco::RangeSensor>("RightFootCameraSensor").X_p_s();
       //
       if(log.get<sva::ForceVecd>("RightFootForceSensor", cur_i, sva::ForceVecd::Zero()).force().z() < 20)
       {
@@ -382,22 +466,24 @@ int main(int argc, char * argv[])
       {
         // We are in Support and we cancel the rotation of the foot !
         // TODO: Need to add this to the controller to in SoftFootState.cpp
-        X_0_ph.rotation() = Eigen::Matrix3d::Identity();
+        right_X_0_ph.rotation() = Eigen::Matrix3d::Identity();
       }
 
       // Keep the sensor pose when we receive a new set of data
-      X_0_s = X_ph_s * X_0_ph;
+      right_X_0_s = right_X_ph_s * right_X_0_ph;
     }
 
     // Compute the 3D point in world frame
-    points.clear();
-    for(size_t i = 0; i < points_x.size(); ++i)
+    right_points.clear();
+    for(size_t i = 0; i < right_points_x.size(); ++i)
     {
-      Eigen::Vector3d pos(points_x[i], points_y[i], points_z[i]);
+      Eigen::Vector3d right_pos(right_points_x[i], right_points_y[i], right_points_z[i]);
       // From camera frame to world frame
-      const sva::PTransformd X_0_m = sva::PTransformd(pos) * X_0_s;
-      points.push_back(X_0_m.translation());
+      const sva::PTransformd right_X_0_m = sva::PTransformd(right_pos) * right_X_0_s;
+      right_points.push_back(right_X_0_m.translation());
     }
+
+
 
     // Log
     logger.log();
