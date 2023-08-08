@@ -359,6 +359,23 @@ int main(int argc, char * argv[])
       return z;
     });
 
+  sva::PTransformd right_X_0_ph = sva::PTransformd::Identity();
+  sva::PTransformd right_X_ph_s = sva::PTransformd::Identity();
+  sva::PTransformd right_X_0_s = sva::PTransformd::Identity();
+
+  sva::PTransformd left_X_0_ph = sva::PTransformd::Identity();
+  sva::PTransformd left_X_ph_s = sva::PTransformd::Identity();
+  sva::PTransformd left_X_0_s = sva::PTransformd::Identity();
+
+  logger.addLogEntry("right_X_0_ph", [&right_X_0_ph]{ return right_X_0_ph; });
+  logger.addLogEntry("right_X_ph_s", [&right_X_ph_s]{ return right_X_ph_s; });
+  logger.addLogEntry("right_X_0_s", [&right_X_0_s]{ return right_X_0_s; });
+
+  logger.addLogEntry("left_X_0_ph", [&left_X_0_ph]{ return left_X_0_ph; });
+  logger.addLogEntry("left_X_ph_s", [&left_X_ph_s]{ return left_X_ph_s; });
+  logger.addLogEntry("left_X_0_s", [&left_X_0_s]{ return left_X_0_s; });
+
+
   // Replay
   LogExplorer appli(log_path, mod, dt);
   appli.setupTimeSection(time_section_name);
@@ -366,12 +383,10 @@ int main(int argc, char * argv[])
   std::vector<double> left_previous_points_x;
   std::vector<double> left_previous_points_y;
   std::vector<double> left_previous_points_z;
-  sva::PTransformd left_X_0_s;
 
   std::vector<double> right_previous_points_x;
   std::vector<double> right_previous_points_y;
   std::vector<double> right_previous_points_z;
-  sva::PTransformd right_X_0_s;
 
   while(true)
   {
@@ -409,9 +424,9 @@ int main(int argc, char * argv[])
     {
       const std::string& left_body_of_sensor = robot.device<mc_mujoco::RangeSensor>("LeftFootCameraSensor").parent();
       // Access the position of body name in world coordinates (phalanx position)
-      sva::PTransformd left_X_0_ph = robot.bodyPosW(left_body_of_sensor);
+      left_X_0_ph = robot.bodyPosW(left_body_of_sensor);
       // Returns the transformation from the parent body to the sensor
-      sva::PTransformd left_X_ph_s = robot.device<mc_mujoco::RangeSensor>("LeftFootCameraSensor").X_p_s();
+      left_X_ph_s = robot.device<mc_mujoco::RangeSensor>("LeftFootCameraSensor").X_p_s();
       //
       if(log.get<sva::ForceVecd>("LeftFootForceSensor", cur_i, sva::ForceVecd::Zero()).force().z() < 20)
       {
@@ -454,9 +469,9 @@ int main(int argc, char * argv[])
     {
       const std::string& right_body_of_sensor = robot.device<mc_mujoco::RangeSensor>("RightFootCameraSensor").parent();
       // Access the position of body name in world coordinates (phalanx position)
-      sva::PTransformd right_X_0_ph = robot.bodyPosW(right_body_of_sensor);
+      right_X_0_ph = robot.bodyPosW(right_body_of_sensor);
       // Returns the transformation from the parent body to the sensor
-      sva::PTransformd right_X_ph_s = robot.device<mc_mujoco::RangeSensor>("RightFootCameraSensor").X_p_s();
+      right_X_ph_s = robot.device<mc_mujoco::RangeSensor>("RightFootCameraSensor").X_p_s();
       //
       if(log.get<sva::ForceVecd>("RightFootForceSensor", cur_i, sva::ForceVecd::Zero()).force().z() < 20)
       {
