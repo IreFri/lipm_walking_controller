@@ -422,6 +422,10 @@ int main(int argc, char * argv[])
     // Check if new data
     if(left_previous_points_x.front() != left_points_x.front())
     {
+      left_previous_points_x = left_points_x;
+      left_previous_points_y = left_points_y;
+      left_previous_points_z = left_points_z;
+
       const std::string& left_body_of_sensor = robot.device<mc_mujoco::RangeSensor>("LeftFootCameraSensor").parent();
       // Access the position of body name in world coordinates (phalanx position)
       left_X_0_ph = robot.bodyPosW(left_body_of_sensor);
@@ -467,6 +471,10 @@ int main(int argc, char * argv[])
     // Check if new data
     if(right_previous_points_x.front() != right_points_x.front())
     {
+      right_previous_points_x = right_points_x;
+      right_previous_points_y = right_points_y;
+      right_previous_points_z = right_points_z;
+
       const std::string& right_body_of_sensor = robot.device<mc_mujoco::RangeSensor>("RightFootCameraSensor").parent();
       // Access the position of body name in world coordinates (phalanx position)
       right_X_0_ph = robot.bodyPosW(right_body_of_sensor);
