@@ -302,7 +302,7 @@ int main(int argc, char * argv[])
 
   // Define what we want to log
   using Policy = mc_rtc::Logger::Policy;
-  mc_rtc::Logger logger(Policy::THREADED, "/home/jrluser/Desktop/Logs/Export", "export");
+  mc_rtc::Logger logger(Policy::THREADED, "/tmp", "export");
   logger.start("data", dt);
 
   logger.addLogEntry("left_points_x",
@@ -362,18 +362,26 @@ int main(int argc, char * argv[])
   sva::PTransformd right_X_0_ph = sva::PTransformd::Identity();
   sva::PTransformd right_X_ph_s = sva::PTransformd::Identity();
   sva::PTransformd right_X_0_s = sva::PTransformd::Identity();
+  sva::PTransformd right_X_0_f = sva::PTransformd::Identity();
+  sva::PTransformd right_X_0_fc = sva::PTransformd::Identity();
 
   sva::PTransformd left_X_0_ph = sva::PTransformd::Identity();
   sva::PTransformd left_X_ph_s = sva::PTransformd::Identity();
   sva::PTransformd left_X_0_s = sva::PTransformd::Identity();
+  sva::PTransformd left_X_0_f = sva::PTransformd::Identity();
+  sva::PTransformd left_X_0_fc = sva::PTransformd::Identity();
 
   logger.addLogEntry("right_X_0_ph", [&right_X_0_ph]{ return right_X_0_ph; });
   logger.addLogEntry("right_X_ph_s", [&right_X_ph_s]{ return right_X_ph_s; });
   logger.addLogEntry("right_X_0_s", [&right_X_0_s]{ return right_X_0_s; });
+  logger.addLogEntry("right_X_0_f", [&right_X_0_f]{ return right_X_0_f; });
+  // logger.addLogEntry("right_X_0_fcontinuous", [&right_X_0_fc]{ return right_X_0_fc; });
 
   logger.addLogEntry("left_X_0_ph", [&left_X_0_ph]{ return left_X_0_ph; });
   logger.addLogEntry("left_X_ph_s", [&left_X_ph_s]{ return left_X_ph_s; });
   logger.addLogEntry("left_X_0_s", [&left_X_0_s]{ return left_X_0_s; });
+  logger.addLogEntry("left_X_0_f", [&left_X_0_f]{ return left_X_0_f; });
+  // logger.addLogEntry("left_X_0_fcontinuous", [&left_X_0_fc]{ return left_X_0_fc; });
 
 
   // Replay
@@ -435,6 +443,8 @@ int main(int argc, char * argv[])
       continue;
     }
 
+    left_X_0_fc = robot.surfacePose("LeftFootCenter");
+
     // Check if new data
     if(left_previous_points_x.front() != left_points_x.front())
     {
@@ -447,6 +457,7 @@ int main(int argc, char * argv[])
       left_X_0_ph = robot.bodyPosW(left_body_of_sensor);
       // Returns the transformation from the parent body to the sensor
       left_X_ph_s = robot.device<mc_mujoco::RangeSensor>("LeftFootCameraSensor").X_p_s();
+      left_X_0_f = robot.surfacePose("LeftFootCenter");
       //
       if(log.get<sva::ForceVecd>("LeftFootForceSensor", cur_i, sva::ForceVecd::Zero()).force().z() < 20)
       {
@@ -484,6 +495,8 @@ int main(int argc, char * argv[])
       continue;
     }
 
+    right_X_0_fc = robot.surfacePose("RightFootCenter");
+
     // Check if new data
     if(right_previous_points_x.front() != right_points_x.front())
     {
@@ -496,6 +509,7 @@ int main(int argc, char * argv[])
       right_X_0_ph = robot.bodyPosW(right_body_of_sensor);
       // Returns the transformation from the parent body to the sensor
       right_X_ph_s = robot.device<mc_mujoco::RangeSensor>("RightFootCameraSensor").X_p_s();
+      right_X_0_f = robot.surfacePose("RightFootCenter");
       //
       if(log.get<sva::ForceVecd>("RightFootForceSensor", cur_i, sva::ForceVecd::Zero()).force().z() < 20)
       {
