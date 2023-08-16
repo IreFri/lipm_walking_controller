@@ -701,10 +701,25 @@ int main(int argc, char * argv[])
   Eigen::Matrix4d plus_offset_view = Eigen::Matrix4d::Identity();
   plus_offset_view.block<3, 1>(0, 3) = Eigen::Vector3d(0., 0.005, 0.);
 
+  Eigen::Matrix4d minus_offset_view = Eigen::Matrix4d::Identity();
+  minus_offset_view.block<3, 1>(0, 3) = Eigen::Vector3d(0., -0.02, 0.);
+
+  std::shared_ptr<open3d::geometry::PointCloud> reference_0(new open3d::geometry::PointCloud);
+  for(size_t i = 0; i < 150; ++i)
+  {
+    reference_0->points_.push_back(Eigen::Vector3d(i * 0.01, +0.05, 0.));
+  }
+
+  reference_0->PaintUniformColor(Eigen::Vector3d(0., 1., 1.));
+  visualizer.AddGeometry(reference_0);
+
+  std::shared_ptr<open3d::geometry::PointCloud> foot_pose(new open3d::geometry::PointCloud);
+  std::shared_ptr<open3d::geometry::PointCloud> ground_selection(new open3d::geometry::PointCloud);
 
   appli.setupTimeSection(time_section_name);
 
   size_t counter = 0;
+  size_t step_counter = 0;
   while(true)
   {
     if(!appli.run())
@@ -730,6 +745,20 @@ int main(int argc, char * argv[])
 
     if(state == "LIPMWalking::DoubleSupport")
     {
+      if("LIPMWalking::SingleSupport" == log.get<std::string>("Executor_LIPMWalking::WalkInternal", cur_i - 1, "None"))
+      {
+        ++step_counter;
+        counter = 0;
+        std::shared_ptr<open3d::geometry::PointCloud> view(new open3d::geometry::PointCloud);
+        *view = *left_foot.reference_source;
+        visualizer.AddGeometry(view);
+        left_foot.reference_source->points_.clear();
+      }
+
+      // if(step_counter == 2)
+      // {
+      //   break;
+      // }
       // break;
       continue;
     }
@@ -810,6 +839,51 @@ int main(int argc, char * argv[])
       }
 
       {
+        mc_rtc::log::info("[Step 2-bis] Estimate the z - pitch to bring back to 0");
+        auto start = std::chrono::high_resolution_clock::now();
+        foot_holder.pitch = 0.;
+        foot_holder.t_z = 0.;
+
+        const sva::PTransformd X_0_b = foot_holder.X_0_b;
+        const sva::PTransformd X_b_s = foot_holder.X_b_s;
+
+        ceres::Problem problem;
+        for(const auto& point: foot_holder.reference_source->points_)
+        {
+          const sva::PTransformd _X_0_p(point);
+          const sva::PTransformd X_s_p = _X_0_p * (X_b_s * X_0_b).inv();
+          ceres::CostFunction* cost_function = PitchZCostFunctor::Create(X_s_p, foot_holder.X_0_b, foot_holder.X_b_s);
+          problem.AddResidualBlock(cost_function,  new ceres::CauchyLoss(0.5), &foot_holder.pitch, &foot_holder.t_z);
+        }
+        ceres::CostFunction * min_p = new ceres::AutoDiffCostFunction<Minimize, 1, 1>(new Minimize());
+        problem.AddResidualBlock(min_p, nullptr, &foot_holder.pitch);
+        ceres::CostFunction * min_z = new ceres::AutoDiffCostFunction<Minimize, 1, 1>(new Minimize());
+        problem.AddResidualBlock(min_z, nullptr, &foot_holder.t_z);
+
+        ceres::Solver::Options options;
+        options.linear_solver_type = ceres::DENSE_QR;
+        ceres::Solver::Summary summary;
+        ceres::Solve(options, &problem, &summary);
+
+        const sva::PTransformd X_b_b(sva::RotY(foot_holder.pitch).cast<double>(), Eigen::Vector3d(0., 0., foot_holder.t_z));
+
+        // Compute the 3D point in world frame
+        auto tmp = foot_holder.reference_source->points_;
+        foot_holder.reference_source->points_.clear();
+        for(const auto& pp: tmp)
+        {
+          // From camera frame to world frame
+          const sva::PTransformd _X_0_p(pp);
+          const sva::PTransformd X_s_p = _X_0_p * (X_b_s * X_0_b).inv();
+          const sva::PTransformd X_0_p = X_s_p * X_b_s * X_b_b * X_0_b;
+          foot_holder.reference_source->points_.push_back(X_0_p.translation());
+        }
+        auto stop = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+        mc_rtc::log::warning("[Step 2-bis] It tooks {} microseconds -> {} milliseconds", duration.count(), duration.count() / 1000.);
+      }
+
+      {
         mc_rtc::log::info("[Step 3] Perform ICP");
         auto start = std::chrono::high_resolution_clock::now();
         foot_holder.source->points_ = foot_holder.points;
@@ -820,15 +894,28 @@ int main(int argc, char * argv[])
           continue;
         }
 
-        foot_holder.source = foot_holder.source->VoxelDownSample(0.005);
-        // TODO: This depend on the foot pose
-        foot_holder.reference_source = foot_holder.reference_source->Crop(open3d::geometry::AxisAlignedBoundingBox(
-          Eigen::Vector3d(0.10, -0.5, -0.04), Eigen::Vector3d(0.50, 0.5, 0.15)));
-        foot_holder.reference_source = foot_holder.reference_source->VoxelDownSample(0.01);
+        const sva::PTransformd X_0_b = foot_holder.X_0_b;
+        mc_rtc::log::info("Current foot pos_x {}", X_0_b.translation().x());
+        mc_rtc::log::info("Current foot pos_y {}", X_0_b.translation().y());
+        mc_rtc::log::info("Point cloud center {}", foot_holder.reference_source->GetCenter().transpose());
+
+        foot_pose->points_.push_back(Eigen::Vector3d(X_0_b.translation().x(), -0.02, X_0_b.translation().z()));
+
+        const auto front = Eigen::Vector3d(X_0_b.translation().x() + 0.0, X_0_b.translation().y() - 0.05, -0.04);
+        const auto back = Eigen::Vector3d(Eigen::Vector3d(X_0_b.translation().x() + 0.55, X_0_b.translation().y() + 0.05, 0.04));
+        ground_selection->points_.push_back(front);
+        ground_selection->points_.push_back(back);
+
+        foot_holder.source = foot_holder.source->VoxelDownSample(0.002);
+        foot_holder.reference_source = foot_holder.reference_source->VoxelDownSample(0.002);
+
+        std::shared_ptr<open3d::geometry::PointCloud> foot_holder_reference_source_cropped(new open3d::geometry::PointCloud);
+        *foot_holder_reference_source_cropped = *foot_holder.reference_source;
+        // foot_holder_reference_source_cropped = foot_holder_reference_source_cropped->Crop(open3d::geometry::AxisAlignedBoundingBox(front, back));
 
         // ICP For matching
         auto result = open3d::pipelines::registration::RegistrationGeneralizedICP(
-            *foot_holder.source, *foot_holder.reference_source, 0.05, Eigen::Matrix4d::Identity(),
+            *foot_holder.source, *foot_holder_reference_source_cropped, 0.05, Eigen::Matrix4d::Identity(),
             open3d::pipelines::registration::TransformationEstimationForGeneralizedICP(),
             open3d::pipelines::registration::ICPConvergenceCriteria(1e-6, 1e-6, 15));
 
@@ -872,6 +959,12 @@ int main(int argc, char * argv[])
   mc_rtc::log::info("Done !");
 
   visualizer.AddGeometry(left_foot.reference_source);
+
+  foot_pose->PaintUniformColor(Eigen::Vector3d(0., 1., 0.));
+  visualizer.AddGeometry(foot_pose);
+
+  ground_selection->PaintUniformColor(Eigen::Vector3d(1., 0.25, 0.75));
+  visualizer.AddGeometry(ground_selection);
 
   while(visualizer.PollEvents())
   {
