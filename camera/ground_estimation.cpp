@@ -911,7 +911,7 @@ int main(int argc, char * argv[])
 
         std::shared_ptr<open3d::geometry::PointCloud> foot_holder_reference_source_cropped(new open3d::geometry::PointCloud);
         *foot_holder_reference_source_cropped = *foot_holder.reference_source;
-        // foot_holder_reference_source_cropped = foot_holder_reference_source_cropped->Crop(open3d::geometry::AxisAlignedBoundingBox(front, back));
+        foot_holder_reference_source_cropped = foot_holder_reference_source_cropped->Crop(open3d::geometry::AxisAlignedBoundingBox(front, back));
 
         // ICP For matching
         auto result = open3d::pipelines::registration::RegistrationGeneralizedICP(
