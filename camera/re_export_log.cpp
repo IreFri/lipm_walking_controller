@@ -396,6 +396,22 @@ int main(int argc, char * argv[])
   std::vector<double> right_previous_points_y;
   std::vector<double> right_previous_points_z;
 
+  std::vector<double> left_points_x = {0.};
+  std::vector<double> left_points_y = {0.};
+  std::vector<double> left_points_z = {0.};
+
+  std::vector<double> right_points_x = {0.};
+  std::vector<double> right_points_y = {0.};
+  std::vector<double> right_points_z = {0.};
+
+  logger.addLogEntry("right_camera_points_x", [&right_points_x]{ return right_points_x; });
+  logger.addLogEntry("right_camera_points_y", [&right_points_y]{ return right_points_y; });
+  logger.addLogEntry("right_camera_points_z", [&right_points_z]{ return right_points_z; });
+
+  logger.addLogEntry("left_camera_points_x", [&left_points_x]{ return left_points_x; });
+  logger.addLogEntry("left_camera_points_y", [&left_points_y]{ return left_points_y; });
+  logger.addLogEntry("left_camera_points_z", [&left_points_z]{ return left_points_z; });
+
   while(true)
   {
     if(!appli.run())
