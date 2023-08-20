@@ -50,6 +50,7 @@ project(${PROJECT_NAME} LANGUAGES C CXX)
 
 add_project_dependency(copra REQUIRED)
 add_project_dependency(Ceres REQUIRED)
+add_project_dependency(Open3D REQUIRED)
 add_project_dependency(realsense2 REQUIRED)
 add_project_dependency(mc_rtc REQUIRED)
 if(NOT TARGET mc_rtc::mc_rtc_ros)

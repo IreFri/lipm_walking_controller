@@ -4,6 +4,8 @@
 #include <thread>
 #include <mutex>
 #include <memory>
+#include <condition_variable>
+#include <open3d/Open3D.h>
 
 namespace lipm_walking
 {
@@ -83,10 +85,27 @@ protected:
 
   std::thread loop_sensor_; ///< Thread to read the sensor data asynchronously
   std::atomic<bool> stop_loop_{false};
-  std::atomic<bool> new_data_{false};
+  std::atomic<bool> new_camera_data_{false};
   std::mutex mutex_;
   std::vector<Eigen::Vector3d> points_;
   double t_ = 0.; // controller time
+
+  //
+  void startGroundEstimation(mc_control::MCController & ctl);
+
+  std::condition_variable estimation_condition_;
+  std::mutex start_estimation_mutex_;
+  std::mutex estimation_mutex_;
+  std::thread estimation_loop_;
+  std::vector<Eigen::Vector3d> corrected_ground_points_;
+  std::vector<Eigen::Vector3d> ground_points_;
+
+  std::shared_ptr<open3d::geometry::PointCloud> pc_estimated_ground_points_;
+  std::shared_ptr<open3d::geometry::PointCloud> pc_transformed_estimated_ground_points_;
+  std::shared_ptr<open3d::geometry::PointCloud> pc_full_ground_reconstructed_points_;
+  std::atomic<bool> new_ground_data_{false};
+
+  std::string desired_state_ = "";
 };
 
 } /* lipm_walking */

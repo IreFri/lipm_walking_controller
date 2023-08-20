@@ -279,6 +279,8 @@ protected:
 
   bool debug_output_ = false;
 
+  std::string current_state_;
+
 };
 
 } // namespace lipm_walking::states
