@@ -222,7 +222,7 @@ void CameraSensor::addToLogger(const mc_control::MCController &,
     const std::lock_guard<std::mutex> lock(mutex_);
     return points_.empty() ? 0. : points_[0].z();
   });
-  logger.addLogEntry(category + "_points_x", [this]() -> std::vector<double>
+  logger.addLogEntry(category + "_camera_points_x", [this]() -> std::vector<double>
   {
     const std::lock_guard<std::mutex> lock(mutex_);
     std::vector<double> d;
@@ -230,7 +230,7 @@ void CameraSensor::addToLogger(const mc_control::MCController &,
       [](const Eigen::Vector3d & v) { return v.x(); });
     return d;
   });
-  logger.addLogEntry(category + "_points_y", [this]() -> std::vector<double>
+  logger.addLogEntry(category + "_camera_points_y", [this]() -> std::vector<double>
   {
     const std::lock_guard<std::mutex> lock(mutex_);
     std::vector<double> d;
@@ -238,12 +238,106 @@ void CameraSensor::addToLogger(const mc_control::MCController &,
       [](const Eigen::Vector3d & v) { return v.y(); });
     return d;
   });
-  logger.addLogEntry(category + "_points_z", [this]() -> std::vector<double>
+  logger.addLogEntry(category + "_camera_points_z", [this]() -> std::vector<double>
   {
     const std::lock_guard<std::mutex> lock(mutex_);
     std::vector<double> d;
     std::transform(points_.begin(), points_.end(), std::back_inserter(d),
       [](const Eigen::Vector3d & v) { return v.z(); });
+    return d;
+  });
+
+  logger.addLogEntry(category + "_world_points_x", [this]() -> std::vector<double>
+  {
+    const std::lock_guard<std::mutex> lock(estimation_mutex_);
+    std::vector<double> d;
+    std::transform(ground_points_.begin(), ground_points_.end(), std::back_inserter(d),
+      [](const Eigen::Vector3d & v) { return v.x(); });
+    return d;
+  });
+  logger.addLogEntry(category + "_world_points_y", [this]() -> std::vector<double>
+  {
+    const std::lock_guard<std::mutex> lock(estimation_mutex_);
+    std::vector<double> d;
+    std::transform(ground_points_.begin(), ground_points_.end(), std::back_inserter(d),
+      [](const Eigen::Vector3d & v) { return v.y(); });
+    return d;
+  });
+  logger.addLogEntry(category + "_world_points_z", [this]() -> std::vector<double>
+  {
+    const std::lock_guard<std::mutex> lock(estimation_mutex_);
+    std::vector<double> d;
+    std::transform(ground_points_.begin(), ground_points_.end(), std::back_inserter(d),
+      [](const Eigen::Vector3d & v) { return v.z(); });
+    return d;
+  });
+
+
+  logger.addLogEntry(category + "_world_transformed_points_x", [this]() -> std::vector<double>
+  {
+    const std::lock_guard<std::mutex> lock(estimation_mutex_);
+    std::vector<double> d;
+    if(pc_transformed_estimated_ground_points_)
+    {
+      std::transform(pc_transformed_estimated_ground_points_->points_.begin(), pc_transformed_estimated_ground_points_->points_.end(), std::back_inserter(d),
+        [](const Eigen::Vector3d & v) { return v.x(); });
+    }
+    return d;
+  });
+  logger.addLogEntry(category + "_world_transformed_points_y", [this]() -> std::vector<double>
+  {
+    const std::lock_guard<std::mutex> lock(estimation_mutex_);
+    std::vector<double> d;
+    if(pc_transformed_estimated_ground_points_)
+    {
+      std::transform(pc_transformed_estimated_ground_points_->points_.begin(), pc_transformed_estimated_ground_points_->points_.end(), std::back_inserter(d),
+        [](const Eigen::Vector3d & v) { return v.y(); });
+    }
+    return d;
+  });
+  logger.addLogEntry(category + "_world_transformed_points_z", [this]() -> std::vector<double>
+  {
+    const std::lock_guard<std::mutex> lock(estimation_mutex_);
+    std::vector<double> d;
+    if(pc_transformed_estimated_ground_points_)
+    {
+      std::transform(pc_transformed_estimated_ground_points_->points_.begin(), pc_transformed_estimated_ground_points_->points_.end(), std::back_inserter(d),
+        [](const Eigen::Vector3d & v) { return v.z(); });
+    }
+    return d;
+  });
+
+  logger.addLogEntry(category + "_ground_points_x", [this]() -> std::vector<double>
+  {
+    const std::lock_guard<std::mutex> lock(estimation_mutex_);
+    std::vector<double> d;
+    if(pc_full_ground_reconstructed_points_)
+    {
+      std::transform(pc_full_ground_reconstructed_points_->points_.begin(), pc_full_ground_reconstructed_points_->points_.end(), std::back_inserter(d),
+        [](const Eigen::Vector3d & v) { return v.x(); });
+    }
+    return d;
+  });
+  logger.addLogEntry(category + "_ground_points_y", [this]() -> std::vector<double>
+  {
+    const std::lock_guard<std::mutex> lock(estimation_mutex_);
+    std::vector<double> d;
+    if(pc_full_ground_reconstructed_points_)
+    {
+      std::transform(pc_full_ground_reconstructed_points_->points_.begin(), pc_full_ground_reconstructed_points_->points_.end(), std::back_inserter(d),
+        [](const Eigen::Vector3d & v) { return v.y(); });
+    }
+    return d;
+  });
+  logger.addLogEntry(category + "_ground_points_z", [this]() -> std::vector<double>
+  {
+    const std::lock_guard<std::mutex> lock(estimation_mutex_);
+    std::vector<double> d;
+    if(pc_full_ground_reconstructed_points_)
+    {
+      std::transform(pc_full_ground_reconstructed_points_->points_.begin(), pc_full_ground_reconstructed_points_->points_.end(), std::back_inserter(d),
+        [](const Eigen::Vector3d & v) { return v.z(); });
+    }
     return d;
   });
 }
@@ -580,50 +674,7 @@ void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
         const auto& X_0_b = ctl.realRobot().bodyPosW(body_of_sensor);
 
         {
-          mc_rtc::log::info("[Step 2] Estimate the z - pitch to bring back to 0");
-          auto start = std::chrono::high_resolution_clock::now();
-
-          double pitch = 0.;
-          double t_z = 0.;
-
-          ceres::Problem problem;
-          for(const auto& new_camera_point: new_camera_points)
-          {
-            ceres::CostFunction* cost_function = PitchZCostFunctor::Create(sva::PTransformd(new_camera_point), X_0_b, X_b_s);
-            problem.AddResidualBlock(cost_function,  new ceres::CauchyLoss(0.5), &pitch, &t_z);
-          }
-          ceres::CostFunction * min_p = new ceres::AutoDiffCostFunction<Minimize, 1, 1>(new Minimize());
-          problem.AddResidualBlock(min_p, nullptr, &pitch);
-          ceres::CostFunction * min_z = new ceres::AutoDiffCostFunction<Minimize, 1, 1>(new Minimize());
-          problem.AddResidualBlock(min_z, nullptr, &t_z);
-
-          ceres::Solver::Options options;
-          options.linear_solver_type = ceres::DENSE_QR;
-          ceres::Solver::Summary summary;
-          ceres::Solve(options, &problem, &summary);
-
-          // Estimated transformation
-          const sva::PTransformd X_b_b(sva::RotY(pitch).cast<double>(), Eigen::Vector3d(0., 0., t_z));
-
-          // Compute the 3D point in world frame
-          corrected_ground_points_.clear();
-          for(const auto& new_camera_point: new_camera_points)
-          {
-            // From camera frame to world frame
-            const sva::PTransformd X_s_p(new_camera_point);
-            const sva::PTransformd X_0_p = (X_s_p * X_b_s * X_b_b * X_0_b);
-            if(X_s_p.translation().x() < 0.05)
-            {
-              corrected_ground_points_.push_back(X_0_p.translation());
-            }
-          }
-          auto stop = std::chrono::high_resolution_clock::now();
-          auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-          mc_rtc::log::warning("[Step 2] It tooks {} microseconds -> {} milliseconds", duration.count(), duration.count() / 1000.);
-        }
-
-        {
-          mc_rtc::log::info("[Step 3] Estimate the z - pitch to bring back to 0");
+          mc_rtc::log::info("[Step 1] Estimate the z - pitch to bring back to 0");
           auto start = std::chrono::high_resolution_clock::now();
           double pitch = 0.;
           double t_z = 0.;
@@ -649,27 +700,29 @@ void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
           const sva::PTransformd X_b_b(sva::RotY(pitch).cast<double>(), Eigen::Vector3d(0., 0., t_z));
 
           // Compute the 3D point in world frame
-          auto tmp = ground_points_;
-          ground_points_.clear();
-          for(const auto& pp: tmp)
           {
-            // From camera frame to world frame
-            const sva::PTransformd _X_0_p(pp);
-            const sva::PTransformd X_s_p = _X_0_p * (X_b_s * X_0_b).inv();
-            const sva::PTransformd X_0_p = X_s_p * X_b_s * X_b_b * X_0_b;
-            ground_points_.push_back(X_0_p.translation());
+            const std::lock_guard<std::mutex> lock(estimation_mutex_);
+            corrected_ground_points_.clear();
+            for(const auto& pp: ground_points_)
+            {
+              // From camera frame to world frame
+              const sva::PTransformd _X_0_p(pp);
+              const sva::PTransformd X_s_p = _X_0_p * (X_b_s * X_0_b).inv();
+              const sva::PTransformd X_0_p = X_s_p * X_b_s * X_b_b * X_0_b;
+              corrected_ground_points_.push_back(X_0_p.translation());
+            }
           }
           auto stop = std::chrono::high_resolution_clock::now();
           auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-          mc_rtc::log::warning("[Step 3] It tooks {} microseconds -> {} milliseconds", duration.count(), duration.count() / 1000.);
+          mc_rtc::log::warning("[Step 1] It tooks {} microseconds -> {} milliseconds", duration.count(), duration.count() / 1000.);
         }
 
         {
-          mc_rtc::log::info("[Step 4] Perform ICP");
+          mc_rtc::log::info("[Step 2] Perform ICP");
           auto start = std::chrono::high_resolution_clock::now();
           {
             const std::lock_guard<std::mutex> lock(estimation_mutex_);
-            pc_estimated_ground_points_->points_ = new_camera_points;
+            pc_estimated_ground_points_->points_ = corrected_ground_points_;
           }
 
           if(pc_full_ground_reconstructed_points_->points_.empty())
@@ -706,7 +759,7 @@ void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
           }
           auto stop = std::chrono::high_resolution_clock::now();
           auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-          mc_rtc::log::warning("[Step 4] It tooks {} microseconds -> {} milliseconds", duration.count(), duration.count() / 1000.);
+          mc_rtc::log::warning("[Step 2] It tooks {} microseconds -> {} milliseconds", duration.count(), duration.count() / 1000.);
         }
       }
     }
