@@ -1403,7 +1403,17 @@ ObserverPipelines:
       config:
         camera_serial: 230322275639
         sensor_name: LeftFootCameraSensor
-        path_to_preset: "/home/jrluser/my_workspace/controller/lipm_walking_controller_softfoot/etc/D405_ShortRangePreset.JSON"
+        path_to_preset: "/home/hrp4cruser/workspace/src/lipm_walking_controller/etc/D405_ShortRangePreset.JSON"
+        kernel_size: 5
+        kernel_threshold: 0.005
+        outlier_threshold: 0.01
+    - type: CameraSensor
+      name: CameraRight
+      gui: true
+      config:
+        camera_serial: 230422273358
+        sensor_name: RightFootCameraSensor
+        path_to_preset: "/home/hrp4cruser/workspace/src/lipm_walking_controller/etc/D405_ShortRangePreset.JSON"
         kernel_size: 5
         kernel_threshold: 0.005
         outlier_threshold: 0.01
