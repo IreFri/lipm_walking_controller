@@ -1401,6 +1401,7 @@ ObserverPipelines:
       name: CameraLeft
       gui: true
       config:
+        desired_state: LeftSwing
         camera_serial: 230322275639
         sensor_name: LeftFootCameraSensor
         path_to_preset: "/home/hrp4cruser/workspace/src/lipm_walking_controller/etc/D405_ShortRangePreset.JSON"
@@ -1411,6 +1412,7 @@ ObserverPipelines:
       name: CameraRight
       gui: true
       config:
+        desired_state: RightSwing
         camera_serial: 230422273358
         sensor_name: RightFootCameraSensor
         path_to_preset: "/home/hrp4cruser/workspace/src/lipm_walking_controller/etc/D405_ShortRangePreset.JSON"
