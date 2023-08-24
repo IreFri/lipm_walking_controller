@@ -59,6 +59,8 @@ if(NOT TARGET mc_rtc::mc_rtc_ros)
       "mc_rtc must be built with ROS support for this controller to work")
 endif()
 add_project_dependency(eigen-quadprog REQUIRED)
+# For Boost IPC
+find_package(Boost REQUIRED COMPONENTS thread system)
 
 if(EXISTS "${MC_RTC_LIBDIR}/mc_controller/etc/LIPMWalking.conf")
   message(
@@ -78,8 +80,8 @@ find_package(catkin REQUIRED COMPONENTS roscpp variable_stiffness)
 find_package(mc_mujoco REQUIRED)
 
 add_subdirectory(3rd-party/qhull EXCLUDE_FROM_ALL)
-set(BUILD_TESTS OFF)
-set(SERIAL_BUILD_SHARED_LIBS ON)
+set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(SERIAL_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 add_subdirectory(3rd-party/CppLinuxSerial EXCLUDE_FROM_ALL)
 add_subdirectory(3rd-party/serial EXCLUDE_FROM_ALL)
 

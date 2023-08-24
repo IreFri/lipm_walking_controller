@@ -76,18 +76,30 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/etc/LIPMWalkingSoftFoot.yaml"
 
 add_subdirectory(states)
 
-macro(add_simple_observer observer_name)
-# mc_observers doesn't actually depend on mc_control, but the observer's implementation does
-target_link_libraries(${observer_name} PUBLIC mc_rtc::mc_control)
-endmacro()
-
 add_observer(RangeSensor observer/usbio.c observer/usbio.h observer/usbio_private.h observer/RangeSensor.cpp "${CMAKE_SOURCE_DIR}/include/lipm_walking/observer/RangeSensor.h")
 target_link_libraries(RangeSensor PUBLIC mc_rtc::mc_control mc_mujoco::devices)
 target_link_libraries(RangeSensor PRIVATE CppLinuxSerial::CppLinuxSerial)
 target_link_libraries(RangeSensor PUBLIC Boost::filesystem)
 
+add_library(CameraSensorShared OBJECT observer/CameraSensorShared.cpp "${CMAKE_SOURCE_DIR}/include/lipm_walking/observer/CameraSensorShared.h")
+target_include_directories(CameraSensorShared PUBLIC $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>)
+target_link_libraries(CameraSensorShared PUBLIC mc_rtc::mc_control Boost::thread Boost::system)
+set_target_properties(CameraSensorShared PROPERTIES POSITION_INDEPENDENT_CODE ON)
+find_library(LIBRT rt)
+if(LIBRT)
+  target_link_libraries(CameraSensorShared PUBLIC ${LIBRT})
+endif()
+
+add_executable(CameraSensorResetShm observer/CameraSensorResetShm.cpp)
+target_link_libraries(CameraSensorResetShm PUBLIC CameraSensorShared)
+
+add_executable(CameraSensorServer observer/CameraSensorServer.cpp)
+target_link_libraries(CameraSensorServer PUBLIC CameraSensorShared Open3D::Open3D ceres ${realsense2_LIBRARY})
+
+install(TARGETS CameraSensorResetShm CameraSensorServer DESTINATION bin)
+
 add_observer(CameraSensor observer/CameraSensor.cpp "${CMAKE_SOURCE_DIR}/include/lipm_walking/observer/CameraSensor.h")
-target_link_libraries(CameraSensor PUBLIC mc_rtc::mc_control mc_mujoco::devices Open3D::Open3D ceres ${realsense2_LIBRARY})
+target_link_libraries(CameraSensor PUBLIC mc_rtc::mc_control mc_mujoco::devices CameraSensorShared)
 target_include_directories(CameraSensor PUBLIC ${realsense2_DIR})
 message("============================")
 message(${realsense2_LIBRARY})

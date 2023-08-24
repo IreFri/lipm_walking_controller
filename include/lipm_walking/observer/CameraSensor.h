@@ -1,11 +1,10 @@
 #pragma once
 
 #include <mc_observers/Observer.h>
+
+#include <lipm_walking/observer/CameraSensorShared.h>
+
 #include <thread>
-#include <mutex>
-#include <memory>
-#include <condition_variable>
-#include <open3d/Open3D.h>
 
 namespace lipm_walking
 {
@@ -28,7 +27,10 @@ public:
   virtual ~CameraSensor()
   {
     stop_loop_ = true;
-    loop_sensor_.join();
+    if(estimation_loop_.joinable())
+    {
+      estimation_loop_.join();
+    }
   }
 
   void configure(const mc_control::MCController & ctl, const mc_rtc::Configuration &) override;
@@ -38,8 +40,6 @@ public:
   bool run(const mc_control::MCController & ctl) override;
 
   void update(mc_control::MCController & ctl) override;
-
-public:
 
 protected:
   /*! \brief Add observer from logger
@@ -62,50 +62,30 @@ protected:
                 mc_rtc::gui::StateBuilder &,
                 const std::vector<std::string> & /* category */) override;
 
-protected:
   /// @{
-  std::string robot_name_ = ""; ///< Name of robot to which the rnage sensor belongs
+  std::string robot_name_; ///< Name of robot to which the rnage sensor belongs
 
-  std::string sensor_name_ = "";
+  std::string sensor_name_;
 
-  std::string path_to_preset_ = "";
-
-  std::string camera_serial_ = "";
-
-  std::string path_to_replay_data_ = "";
-
-  size_t kernel_size_ = 3;
-
-  float kernel_threshold_ = 0.005f;
-
-  float outlier_threshold_ = 0.01f;
-
+  std::string desired_state_;
   //
-  void startReadingCamera();
+  CameraSensorShared * data_;
 
-  std::thread loop_sensor_; ///< Thread to read the sensor data asynchronously
+  bool serverOnline_ = false;
+  double lastServerOfflineMessage_t_ = 0.0;
+
   std::atomic<bool> stop_loop_{false};
-  std::atomic<bool> new_camera_data_{false};
-  std::mutex mutex_;
-  std::vector<Eigen::Vector3d> points_;
   double t_ = 0.; // controller time
 
-  //
   void startGroundEstimation(mc_control::MCController & ctl);
 
-  std::condition_variable estimation_condition_;
-  std::mutex start_estimation_mutex_;
-  std::mutex estimation_mutex_;
   std::thread estimation_loop_;
-  std::vector<Eigen::Vector3d> corrected_ground_points_;
-  std::vector<Eigen::Vector3d> ground_points_;
 
-  std::shared_ptr<open3d::geometry::PointCloud> pc_estimated_ground_points_;
-  std::shared_ptr<open3d::geometry::PointCloud> pc_transformed_estimated_ground_points_;
-  std::shared_ptr<open3d::geometry::PointCloud> pc_full_ground_reconstructed_points_;
   std::atomic<bool> new_ground_data_{false};
+  std::mutex points_mtx_;
+  std::vector<Eigen::Vector3d> points_;
 
-  std::string desired_state_ = "";
+  void updateServerOnline();
 };
 
-} /* lipm_walking */
+} // namespace lipm_walking
