@@ -20,7 +20,9 @@ namespace
 
 ipc::managed_shared_memory & get_shm()
 {
-  static ipc::managed_shared_memory shm(ipc::open_or_create, CAMERA_SENSOR_SHM_ID, 64 * sizeof(CameraSensorShared));
+  // Allocate enough space for 64 cameras and 1024 points per camera
+  static ipc::managed_shared_memory shm(ipc::open_or_create, CAMERA_SENSOR_SHM_ID,
+                                        64 * (sizeof(CameraSensorShared) + 1024 * sizeof(Eigen::Vector3d)));
   return shm;
 }
 
