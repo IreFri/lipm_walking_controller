@@ -355,6 +355,18 @@ void CameraSensor::addToGUI(const mc_control::MCController & ctl,
                                 const std::vector<std::string> & category)
 {
   gui.addElement(category,
+    mc_rtc::gui::Label("Frame acquistion [ms]",
+      [this]()
+      {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        return camera_duration_;
+      }),
+    mc_rtc::gui::Label("Ground reconstruction [ms]",
+      [this]()
+      {
+        const std::lock_guard<std::mutex> lock(estimation_mutex_);
+        return ground_reconstruction_duration_;
+      }),
     mc_rtc::gui::Label("Range [m]",
       [this]()
       {
@@ -421,13 +433,13 @@ void CameraSensor::addToGUI(const mc_control::MCController & ctl,
   std::vector<std::string> points_category = category;
   points_category.push_back("points");
   gui.addElement(points_category,
-    mc_rtc::gui::Trajectory("Points",
+    mc_rtc::gui::Trajectory("Ground points", mc_rtc::gui::Color::Green,
       [this, &ctl]()
       {
         std::vector<Eigen::Vector3d> points;
         {
           const std::lock_guard<std::mutex> lock(mutex_);
-          points = points_;
+          points = ground_points_;
         }
 
         if(points.empty())
@@ -435,19 +447,29 @@ void CameraSensor::addToGUI(const mc_control::MCController & ctl,
           return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
         }
 
-        const std::string& body_of_sensor = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).parent();
-        // Access the position of body name in world coordinates (phalanx position)
-        sva::PTransformd X_0_ph = ctl.realRobot().bodyPosW(body_of_sensor);
-        // Returns the transformation from the parent body to the sensor
-        const sva::PTransformd& X_ph_s = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s();
-        // Keep the estimated 3d point for the ground
-        std::vector<Eigen::Vector3d> traj;
-        for(const auto& point: points)
+        return points;
+      })
+  );
+
+  gui.addElement(points_category,
+    mc_rtc::gui::Trajectory("Ground reconstructed",
+      [this, &ctl]()
+      {
+        std::vector<Eigen::Vector3d> points;
         {
-          const sva::PTransformd X_0_m = sva::PTransformd(point) * X_ph_s * X_0_ph;
-          traj.push_back(X_0_m.translation());
+          const std::lock_guard<std::mutex> lock(estimation_mutex_);
+          if(pc_full_ground_reconstructed_points_)
+          {
+            points = pc_full_ground_reconstructed_points_->points_;
+          }
         }
-        return traj;
+
+        if(points.empty())
+        {
+          return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
+        }
+
+        return points;
       })
   );
 
@@ -566,6 +588,7 @@ void CameraSensor::startReadingCamera()
       while(!stop_loop_.load())
       {
         auto frames = pipe.wait_for_frames();
+        auto start = std::chrono::high_resolution_clock::now();
 
         // Get depth frame
         auto frame = frames.get_depth_frame();
@@ -576,7 +599,7 @@ void CameraSensor::startReadingCamera()
         frame = frame.apply_filter(spat);
         frame = frame.apply_filter(disparity2depth);
 
-        rs2_intrinsics intrinsics = frame.get_profile().as<rs2::video_stream_profile>().get_intrinsics();
+        const rs2_intrinsics intrinsics = frame.get_profile().as<rs2::video_stream_profile>().get_intrinsics();
 
         const size_t height = frame.get_height();
         const size_t width = frame.get_width();
@@ -584,20 +607,20 @@ void CameraSensor::startReadingCamera()
         const size_t half_height = static_cast<size_t>(static_cast<double>(height) * 0.5);
         const size_t half_width = static_cast<size_t>(static_cast<double>(width) * 0.5);
 
-
         std::array<float, 2> pixel;
         const int half_kernel_size = static_cast<int>(kernel_size_/2);
         std::vector<Eigen::Vector3d> points;
-        const size_t offset = 110;
-        for(size_t i = half_kernel_size - offset; i < width - half_kernel_size - offset; ++i)
+        const int offset = 20;
+        for(size_t i = half_height + half_kernel_size; i < height - half_kernel_size - offset; ++i)
         {
           pixel[0] = static_cast<float>(i);
           pixel[1] = static_cast<float>(half_height);
 
           const float depth = applyKernel(pixel, frame);
-          const Eigen::Vector3d point = depthToPoint(intrinsics, pixel, depth);
-          if(point.z() != 0)
+          Eigen::Vector3d point = depthToPoint(intrinsics, pixel, depth);
+          if(point.z() != 0 && point.x() < 0.05 && point.z() < 0.30)
           {
+            point.y() = 0.;
             points.push_back(point);
           }
         }
@@ -611,10 +634,12 @@ void CameraSensor::startReadingCamera()
         }
 
         // Needs to update
+        new_camera_data_ = true;
+
+        auto stop = std::chrono::high_resolution_clock::now();
         {
-          const std::lock_guard<std::mutex> lock(start_estimation_mutex_);
-          new_camera_data_ = true;
-          estimation_condition_.notify_one();
+          const std::lock_guard<std::mutex> lock(mutex_);
+          camera_duration_ = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count();
         }
       }
     }
@@ -671,21 +696,24 @@ void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
         }
 
         // Access the position of body name in world coordinates (phalanx position)
+        auto start = std::chrono::high_resolution_clock::now();
         const auto& X_0_b = ctl.realRobot().bodyPosW(body_of_sensor);
 
         {
-          mc_rtc::log::info("[Step 1] Estimate the z - pitch to bring back to 0");
-          auto start = std::chrono::high_resolution_clock::now();
+          ceres::Problem problem;
           double pitch = 0.;
           double t_z = 0.;
-
-          ceres::Problem problem;
-          for(const auto& point: ground_points_)
           {
-            const sva::PTransformd _X_0_p(point);
-            const sva::PTransformd X_s_p = _X_0_p * (X_b_s * X_0_b).inv();
-            ceres::CostFunction* cost_function = PitchZCostFunctor::Create(X_s_p, X_0_b, X_b_s);
-            problem.AddResidualBlock(cost_function,  new ceres::CauchyLoss(0.5), &pitch, &t_z);
+            const std::lock_guard<std::mutex> lock(estimation_mutex_);
+            ground_points_.clear();
+            for(const auto& point: new_camera_points)
+            {
+              const sva::PTransformd X_0_p = sva::PTransformd(point) * X_b_s * X_0_b;
+              ground_points_.push_back(X_0_p.translation());
+              const sva::PTransformd X_s_p(point);
+              ceres::CostFunction* cost_function = PitchZCostFunctor::Create(X_s_p, X_0_b, X_b_s);
+              problem.AddResidualBlock(cost_function,  new ceres::CauchyLoss(0.5), &pitch, &t_z);
+            }
           }
           ceres::CostFunction * min_p = new ceres::AutoDiffCostFunction<Minimize, 1, 1>(new Minimize());
           problem.AddResidualBlock(min_p, nullptr, &pitch);
@@ -703,23 +731,18 @@ void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
           {
             const std::lock_guard<std::mutex> lock(estimation_mutex_);
             corrected_ground_points_.clear();
-            for(const auto& pp: ground_points_)
+            for(const auto& point: new_camera_points)
             {
               // From camera frame to world frame
-              const sva::PTransformd _X_0_p(pp);
-              const sva::PTransformd X_s_p = _X_0_p * (X_b_s * X_0_b).inv();
+              const sva::PTransformd X_s_p(point);
               const sva::PTransformd X_0_p = X_s_p * X_b_s * X_b_b * X_0_b;
               corrected_ground_points_.push_back(X_0_p.translation());
             }
           }
-          auto stop = std::chrono::high_resolution_clock::now();
-          auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-          mc_rtc::log::warning("[Step 1] It tooks {} microseconds -> {} milliseconds", duration.count(), duration.count() / 1000.);
         }
 
+        try
         {
-          mc_rtc::log::info("[Step 2] Perform ICP");
-          auto start = std::chrono::high_resolution_clock::now();
           {
             const std::lock_guard<std::mutex> lock(estimation_mutex_);
             pc_estimated_ground_points_->points_ = corrected_ground_points_;
@@ -734,7 +757,7 @@ void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
 
           {
             const std::lock_guard<std::mutex> lock(estimation_mutex_);
-            pc_estimated_ground_points_ = pc_estimated_ground_points_->VoxelDownSample(0.002);
+            pc_estimated_ground_points_ = pc_estimated_ground_points_->VoxelDownSample(0.005);
           }
 
           const auto front = Eigen::Vector3d(X_0_b.translation().x() + 0.0, X_0_b.translation().y() - 0.05, -0.04);
@@ -755,12 +778,17 @@ void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
             *pc_transformed_estimated_ground_points_ = *pc_estimated_ground_points_;
             pc_transformed_estimated_ground_points_->Transform(result.transformation_);
             *pc_full_ground_reconstructed_points_ += *pc_transformed_estimated_ground_points_;
+            pc_full_ground_reconstructed_points_ = pc_full_ground_reconstructed_points_->VoxelDownSample(0.005);
+            std::sort(pc_full_ground_reconstructed_points_->points_.begin(), pc_full_ground_reconstructed_points_->points_.end(), [](const Eigen::Vector3d& a, const Eigen::Vector3d& b) { return a.x() < b.x(); });
             new_ground_data_ = true;
           }
-          auto stop = std::chrono::high_resolution_clock::now();
-          auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-          mc_rtc::log::warning("[Step 2] It tooks {} microseconds -> {} milliseconds", duration.count(), duration.count() / 1000.);
         }
+        catch (const std::runtime_error& e)
+        {
+          std::cout << e.what() << std::endl;
+        }
+        auto stop = std::chrono::high_resolution_clock::now();
+        ground_reconstruction_duration_ = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
       }
     }
   );
