@@ -210,16 +210,17 @@ void CameraSensorServer::acquisition()
     std::array<float, 2> pixel;
     const size_t half_kernel_size = kernel_size_ / 2;
     std::vector<Eigen::Vector3d> points;
-    const size_t offset = 110;
-    for(size_t i = half_kernel_size - offset; i < width - half_kernel_size - offset; ++i)
+    const int offset = 20;
+    for(size_t i = half_height + half_kernel_size; i < height - half_kernel_size - offset; ++i)
     {
       pixel[0] = static_cast<float>(i);
       pixel[1] = static_cast<float>(half_height);
 
       const float depth = applyKernel(pixel, frame);
       const Eigen::Vector3d point = depthToPoint(intrinsics, pixel, depth);
-      if(point.z() != 0)
+      if(point.z() != 0 && point.x() < 0.05 && point.z() < 0.30)
       {
+        point.y() = 0.;
         points.push_back(point);
       }
     }
@@ -314,9 +315,8 @@ void CameraSensorServer::do_computation()
       for(const auto & pp : ground_points_)
       {
         // From camera frame to world frame
-        sva::PTransformd X_0_p(pp);
-        sva::PTransformd X_s_p = X_0_p * (data_->X_b_s * data_->X_0_b).inv();
-        X_0_p = X_s_p * data_->X_b_s * X_b_b * data_->X_0_b;
+        sva::PTransformd X_s_p(pp);
+        sva::PTransformd X_0_p = X_s_p * data_->X_b_s * X_b_b * data_->X_0_b;
         corrected_ground_points_.push_back(X_0_p.translation());
       }
     }
@@ -339,7 +339,7 @@ void CameraSensorServer::do_computation()
       return;
     }
 
-    pc_estimated_ground_points_ = pc_estimated_ground_points_->VoxelDownSample(0.002);
+    pc_estimated_ground_points_ = pc_estimated_ground_points_->VoxelDownSample(0.005);
 
     const auto front =
         Eigen::Vector3d(data_->X_0_b.translation().x() + 0.0, data_->X_0_b.translation().y() - 0.05, -0.04);
@@ -360,6 +360,10 @@ void CameraSensorServer::do_computation()
       *pc_transformed_estimated_ground_points_ = *pc_estimated_ground_points_;
       pc_transformed_estimated_ground_points_->Transform(result.transformation_);
       *pc_full_ground_reconstructed_points_ += *pc_transformed_estimated_ground_points_;
+      pc_full_ground_reconstructed_points_ = pc_full_ground_reconstructed_points_->VoxelDownSample(0.005);
+      std::sort(pc_full_ground_reconstructed_points_->points_.begin(),
+                pc_full_ground_reconstructed_points_->points_.end(),
+                [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
     }
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
