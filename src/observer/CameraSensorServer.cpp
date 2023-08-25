@@ -217,7 +217,7 @@ void CameraSensorServer::acquisition()
       pixel[1] = static_cast<float>(half_height);
 
       const float depth = applyKernel(pixel, frame);
-      const Eigen::Vector3d point = depthToPoint(intrinsics, pixel, depth);
+      Eigen::Vector3d point = depthToPoint(intrinsics, pixel, depth);
       if(point.z() != 0 && point.x() < 0.05 && point.z() < 0.30)
       {
         point.y() = 0.;
@@ -279,6 +279,7 @@ void CameraSensorServer::do_computation()
     return;
   }
   {
+    mc_rtc::log::info("Acquired {} raw points", points_.size());
     const std::lock_guard<std::mutex> lock(points_mtx_);
     ground_points_ = points_;
     corrected_ground_points_.reserve(ground_points_.size());
@@ -329,42 +330,54 @@ void CameraSensorServer::do_computation()
     mc_rtc::log::info("[Step 2] Perform ICP");
     auto start = std::chrono::high_resolution_clock::now();
 
-    pc_estimated_ground_points_->points_ = corrected_ground_points_;
-
-    if(pc_full_ground_reconstructed_points_->points_.empty())
+    try
     {
-      *pc_full_ground_reconstructed_points_ = *pc_estimated_ground_points_;
-      ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
-      data_->points.resize(0);
-      return;
+      pc_estimated_ground_points_->points_ = corrected_ground_points_;
+
+      if(pc_full_ground_reconstructed_points_->points_.empty())
+      {
+        mc_rtc::log::warning("No points yet, waiting for more data");
+        *pc_full_ground_reconstructed_points_ = *pc_estimated_ground_points_;
+        mc_rtc::log::warning("pc_full_ground_reconstructed_points_ has now {} points",
+                             pc_full_ground_reconstructed_points_->points_.size());
+        ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+        data_->points.resize(0);
+        return;
+      }
+
+      // pc_estimated_ground_points_ = pc_estimated_ground_points_->VoxelDownSample(0.005);
+
+      const auto front =
+          Eigen::Vector3d(data_->X_0_b.translation().x() + 0.0, data_->X_0_b.translation().y() - 0.05, -0.04);
+      const auto back = Eigen::Vector3d(
+          Eigen::Vector3d(data_->X_0_b.translation().x() + 0.55, data_->X_0_b.translation().y() + 0.05, 0.04));
+      std::shared_ptr<open3d::geometry::PointCloud> pc_ground_points_cropped(new open3d::geometry::PointCloud);
+      *pc_ground_points_cropped = *pc_full_ground_reconstructed_points_;
+      // pc_ground_points_cropped = pc_ground_points_cropped->Crop(open3d::geometry::AxisAlignedBoundingBox(front,
+      // back));
+
+      // ICP For matching
+      auto result = open3d::pipelines::registration::RegistrationGeneralizedICP(
+          *pc_estimated_ground_points_, *pc_ground_points_cropped, 0.05, Eigen::Matrix4d::Identity(),
+          open3d::pipelines::registration::TransformationEstimationForGeneralizedICP(),
+          open3d::pipelines::registration::ICPConvergenceCriteria(1e-6, 1e-6, 15));
+
+      // Apply transformation
+      {
+        *pc_transformed_estimated_ground_points_ = *pc_estimated_ground_points_;
+        pc_transformed_estimated_ground_points_->Transform(result.transformation_);
+        *pc_full_ground_reconstructed_points_ += *pc_transformed_estimated_ground_points_;
+        pc_full_ground_reconstructed_points_ = pc_full_ground_reconstructed_points_->VoxelDownSample(0.005);
+        std::sort(pc_full_ground_reconstructed_points_->points_.begin(),
+                  pc_full_ground_reconstructed_points_->points_.end(),
+                  [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+      }
+    }
+    catch(const std::runtime_error & e)
+    {
+      mc_rtc::log::critical("IPC exception:\n{}", e.what());
     }
 
-    pc_estimated_ground_points_ = pc_estimated_ground_points_->VoxelDownSample(0.005);
-
-    const auto front =
-        Eigen::Vector3d(data_->X_0_b.translation().x() + 0.0, data_->X_0_b.translation().y() - 0.05, -0.04);
-    const auto back = Eigen::Vector3d(
-        Eigen::Vector3d(data_->X_0_b.translation().x() + 0.55, data_->X_0_b.translation().y() + 0.05, 0.04));
-    std::shared_ptr<open3d::geometry::PointCloud> pc_ground_points_cropped(new open3d::geometry::PointCloud);
-    *pc_ground_points_cropped = *pc_full_ground_reconstructed_points_;
-    pc_ground_points_cropped = pc_ground_points_cropped->Crop(open3d::geometry::AxisAlignedBoundingBox(front, back));
-
-    // ICP For matching
-    auto result = open3d::pipelines::registration::RegistrationGeneralizedICP(
-        *pc_estimated_ground_points_, *pc_ground_points_cropped, 0.05, Eigen::Matrix4d::Identity(),
-        open3d::pipelines::registration::TransformationEstimationForGeneralizedICP(),
-        open3d::pipelines::registration::ICPConvergenceCriteria(1e-6, 1e-6, 15));
-
-    // Apply transformation
-    {
-      *pc_transformed_estimated_ground_points_ = *pc_estimated_ground_points_;
-      pc_transformed_estimated_ground_points_->Transform(result.transformation_);
-      *pc_full_ground_reconstructed_points_ += *pc_transformed_estimated_ground_points_;
-      pc_full_ground_reconstructed_points_ = pc_full_ground_reconstructed_points_->VoxelDownSample(0.005);
-      std::sort(pc_full_ground_reconstructed_points_->points_.begin(),
-                pc_full_ground_reconstructed_points_->points_.end(),
-                [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
-    }
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
     mc_rtc::log::warning("[Step 2] It tooks {} microseconds -> {} milliseconds", duration.count(),
