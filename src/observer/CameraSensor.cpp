@@ -16,6 +16,12 @@ CameraSensor::CameraSensor(const std::string & type, double dt) : mc_observers::
 void CameraSensor::configure(const mc_control::MCController & ctl, const mc_rtc::Configuration & config)
 {
   data_ = CameraSensorShared::get(name_.c_str());
+  if(data_->client.isAlive())
+  {
+    mc_rtc::log::error_and_throw("[CameraSensor::{}] Previous client (pid: {}) is still alive", name_,
+                                 data_->client.pid);
+  }
+  data_->newClient(getpid());
   if(!data_->server.isAlive())
   {
     mc_rtc::log::critical("[CameraSensor::{}] Server is not running yet?", name_);
@@ -274,6 +280,7 @@ void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
             ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->mtx);
             if(data_->data_ready->timed_wait(lck, pclock::universal_time() + ptime::seconds(1)))
             {
+              data_->skip = false;
               if(ctl.datastore().has("SoftFootState::GetState"))
               {
                 const std::string state = ctl.datastore().call<std::string>("SoftFootState::GetState");
@@ -292,7 +299,6 @@ void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
               data_->compute_ready->notify_all();
               continue;
             }
-            data_->skip = false;
             data_->fz = ctl.robot().bodyForceSensor(body_of_sensor).force().z();
             data_->X_0_b = ctl.realRobot().bodyPosW(body_of_sensor);
             data_->compute_ready->notify_all();
