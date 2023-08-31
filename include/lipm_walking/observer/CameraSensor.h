@@ -87,6 +87,8 @@ protected:
   std::vector<Eigen::Vector3d> ground_points_;
 
   void updateServerOnline();
+
+  void publish_plot_data(std::vector<std::array<double, 2>> & points);
 };
 
 } // namespace lipm_walking

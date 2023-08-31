@@ -96,6 +96,7 @@ void CameraSensor::update(mc_control::MCController & ctl)
 {
   t_ += ctl.solver().dt();
   updateServerOnline();
+  // Note: new_ground_data will be updated in \ref publish_plot_data
   if(new_ground_data_)
   {
     ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
@@ -108,7 +109,20 @@ void CameraSensor::update(mc_control::MCController & ctl)
     {
       ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).update(ground_points_, t_);
     }
-    new_ground_data_ = false;
+  }
+}
+
+void CameraSensor::publish_plot_data(std::vector<std::array<double, 2>> & points)
+{
+  if(!new_ground_data_)
+  {
+    return;
+  }
+  new_ground_data_ = false;
+  points.reserve(ground_points_.size());
+  for(const auto & p : ground_points_)
+  {
+    points.push_back({p.x(), p.z()});
   }
 }
 
@@ -254,28 +268,28 @@ void CameraSensor::addToGUI(const mc_control::MCController & ctl,
                                 return traj;
                               }));
 
-  gui.addElement(points_category,
-    mc_rtc::gui::Trajectory("Ground reconstructed",
-      [this, &ctl]()
-      {
-        std::vector<Eigen::Vector3d> points;
-        {
-          ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
-          points = ground_points_;
-        }
+  gui.addElement(
+      points_category,
+      mc_rtc::gui::Trajectory("Ground reconstructed",
+                              [this, &ctl]()
+                              {
+                                std::vector<Eigen::Vector3d> points;
+                                {
+                                  ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+                                  points = ground_points_;
+                                }
 
-        if(points.empty())
-        {
-          return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
-        }
+                                if(points.empty())
+                                {
+                                  return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
+                                }
 
-        return points;
-      })
-  );
+                                return points;
+                              }));
 
-  gui.addPlot(fmt::format("CameraSensor::{}", name_), mc_rtc::gui::plot::X("t", [this]() { return t_; }),
-              mc_rtc::gui::plot::Y(
-                  "range", [this]() { return points_.empty() ? 0. : points_[0].z(); }, mc_rtc::gui::Color::Red));
+  gui.addXYPlot(fmt::format("CameraSensor::{}::GroundProfile", name_),
+                mc_rtc::gui::plot::XYChunk(
+                    "profile", [this](auto & points) { publish_plot_data(points); }, mc_rtc::gui::Color::Red));
 }
 
 void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
