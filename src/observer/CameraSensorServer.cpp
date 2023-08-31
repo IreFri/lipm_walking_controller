@@ -204,6 +204,8 @@ void CameraSensorServer::acquisition()
     const size_t height = static_cast<size_t>(frame.get_height());
     const size_t width = static_cast<size_t>(frame.get_width());
 
+    mc_rtc::log::info("h {} w {}", height, width);
+
     const size_t half_height = static_cast<size_t>(static_cast<double>(height) * 0.5);
     const size_t half_width = static_cast<size_t>(static_cast<double>(width) * 0.5);
 
@@ -211,7 +213,7 @@ void CameraSensorServer::acquisition()
     const size_t half_kernel_size = kernel_size_ / 2;
     std::vector<Eigen::Vector3d> points;
     const int offset = 20;
-    for(size_t i = half_height + half_kernel_size; i < height - half_kernel_size - offset; ++i)
+    for(size_t i = 0 + half_kernel_size + offset; i < width - half_kernel_size - offset; ++i)
     {
       pixel[0] = static_cast<float>(i);
       pixel[1] = static_cast<float>(half_height);
@@ -225,6 +227,8 @@ void CameraSensorServer::acquisition()
       }
     }
 
+    mc_rtc::log::info("Read {} points", points.size());
+
     // Sort
     std::sort(points.begin(), points.end(),
               [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
@@ -232,6 +236,15 @@ void CameraSensorServer::acquisition()
     {
       const std::lock_guard<std::mutex> lock(points_mtx_);
       points_ = points;
+    }
+
+    {
+      ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+      data_->points.resize(points.size());
+      for(size_t i = 0; i < points.size(); ++i)
+      {
+        data_->points[i] = points[i];
+      }
     }
     if(data_->client.isAlive())
     {
@@ -258,6 +271,7 @@ void CameraSensorServer::computation()
       ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->mtx);
       if(data_->compute_ready->timed_wait(lck, pclock::universal_time() + ptime::seconds(1)))
       {
+        // mc_rtc::log::error("Here");
         do_computation();
       }
     }
@@ -281,8 +295,8 @@ void CameraSensorServer::do_computation()
   {
     mc_rtc::log::info("Acquired {} raw points", points_.size());
     const std::lock_guard<std::mutex> lock(points_mtx_);
-    ground_points_ = points_;
-    corrected_ground_points_.reserve(ground_points_.size());
+    new_camera_points_ = points_;
+    corrected_ground_points_.reserve(new_camera_points_.size());
   }
   {
     mc_rtc::log::info("[Step 1] Estimate the z - pitch to bring back to 0");
@@ -291,12 +305,12 @@ void CameraSensorServer::do_computation()
     double t_z = 0.;
 
     ceres::Problem problem;
-    for(const auto & point : ground_points_)
+    for(const auto& point: new_camera_points_)
     {
-      const sva::PTransformd X_0_p(point);
-      const sva::PTransformd X_s_p = X_0_p * (data_->X_b_s * data_->X_0_b).inv();
-      ceres::CostFunction * cost_function = PitchZCostFunctor::Create(X_s_p, data_->X_0_b, data_->X_b_s);
-      problem.AddResidualBlock(cost_function, new ceres::CauchyLoss(0.5), &pitch, &t_z);
+      const sva::PTransformd X_0_p = sva::PTransformd(point) * data_->X_b_s * data_->X_0_b;
+      const sva::PTransformd X_s_p(point);
+      ceres::CostFunction* cost_function = PitchZCostFunctor::Create(X_s_p, data_->X_0_b, data_->X_b_s);
+      problem.AddResidualBlock(cost_function,  new ceres::CauchyLoss(0.5), &pitch, &t_z);
     }
     ceres::CostFunction * min_p = new ceres::AutoDiffCostFunction<Minimize, 1, 1>(new Minimize());
     problem.AddResidualBlock(min_p, nullptr, &pitch);
@@ -313,13 +327,13 @@ void CameraSensorServer::do_computation()
     // Compute the 3D point in world frame
     {
       corrected_ground_points_.clear();
-      for(const auto & pp : ground_points_)
-      {
-        // From camera frame to world frame
-        sva::PTransformd X_s_p(pp);
-        sva::PTransformd X_0_p = X_s_p * data_->X_b_s * X_b_b * data_->X_0_b;
-        corrected_ground_points_.push_back(X_0_p.translation());
-      }
+      for(const auto& point: new_camera_points_)
+        {
+          // From camera frame to world frame
+          const sva::PTransformd X_s_p(point);
+          const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * X_b_b * data_->X_0_b;
+          corrected_ground_points_.push_back(X_0_p.translation());
+        }
     }
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
@@ -345,7 +359,7 @@ void CameraSensorServer::do_computation()
         return;
       }
 
-      // pc_estimated_ground_points_ = pc_estimated_ground_points_->VoxelDownSample(0.005);
+      pc_estimated_ground_points_ = pc_estimated_ground_points_->VoxelDownSample(0.005);
 
       const auto front =
           Eigen::Vector3d(data_->X_0_b.translation().x() + 0.0, data_->X_0_b.translation().y() - 0.05, -0.04);
@@ -353,8 +367,7 @@ void CameraSensorServer::do_computation()
           Eigen::Vector3d(data_->X_0_b.translation().x() + 0.55, data_->X_0_b.translation().y() + 0.05, 0.04));
       std::shared_ptr<open3d::geometry::PointCloud> pc_ground_points_cropped(new open3d::geometry::PointCloud);
       *pc_ground_points_cropped = *pc_full_ground_reconstructed_points_;
-      // pc_ground_points_cropped = pc_ground_points_cropped->Crop(open3d::geometry::AxisAlignedBoundingBox(front,
-      // back));
+      pc_ground_points_cropped = pc_ground_points_cropped->Crop(open3d::geometry::AxisAlignedBoundingBox(front, back));
 
       // ICP For matching
       auto result = open3d::pipelines::registration::RegistrationGeneralizedICP(
@@ -387,10 +400,10 @@ void CameraSensorServer::do_computation()
   {
     ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
     const auto & points = pc_full_ground_reconstructed_points_->points_;
-    data_->points.resize(points.size());
+    data_->ground_points.resize(points.size());
     for(size_t i = 0; i < points.size(); ++i)
     {
-      data_->points[i] = points[i];
+      data_->ground_points[i] = points[i];
     }
   }
   data_->result_ready->notify_all();

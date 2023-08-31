@@ -29,7 +29,8 @@ ipc::managed_shared_memory & get_shm()
 } // namespace
 
 CameraSensorShared::CameraSensorShared(CameraSensorShared::CtorKey)
-: points(CameraSensorShared::v3d_allocator(get_shm().get_segment_manager()))
+: points(CameraSensorShared::v3d_allocator(get_shm().get_segment_manager())),
+  ground_points(CameraSensorShared::v3d_allocator(get_shm().get_segment_manager()))
 {
 }
 

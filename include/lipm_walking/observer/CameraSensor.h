@@ -84,6 +84,7 @@ protected:
   std::atomic<bool> new_ground_data_{false};
   std::mutex points_mtx_;
   std::vector<Eigen::Vector3d> points_;
+  std::vector<Eigen::Vector3d> ground_points_;
 
   void updateServerOnline();
 };

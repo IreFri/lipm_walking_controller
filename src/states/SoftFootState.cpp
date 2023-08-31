@@ -590,7 +590,11 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
 
   // Only one range sensor
   const auto& estimated_ground = ctl.robot().device<mc_mujoco::RangeSensor>(range_sensor_names_[current_moving_foot][0]).points();
-  data.ground = estimated_ground;
+
+  if(!estimated_ground.empty())
+  {
+    data.ground = estimated_ground;
+  }
 
   // // Return the parent body of the sensor (phalanx)
   // const std::string& body_of_sensor = ctl.robot().device<mc_mujoco::RangeSensor>(range_sensor_names_[current_moving_foot][0]).parent();

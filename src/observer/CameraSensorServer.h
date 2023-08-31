@@ -45,7 +45,7 @@ private:
   std::shared_ptr<open3d::geometry::PointCloud> pc_transformed_estimated_ground_points_;
   std::shared_ptr<open3d::geometry::PointCloud> pc_full_ground_reconstructed_points_;
   std::vector<Eigen::Vector3d> corrected_ground_points_;
-  std::vector<Eigen::Vector3d> ground_points_;
+  std::vector<Eigen::Vector3d> new_camera_points_;
 
   std::atomic<bool> run_ = false;
 

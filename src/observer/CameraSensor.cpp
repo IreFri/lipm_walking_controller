@@ -99,15 +99,15 @@ void CameraSensor::update(mc_control::MCController & ctl)
   if(new_ground_data_)
   {
     ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
-    points_.resize(data_->points.size());
-    for(size_t i = 0; i < data_->points.size(); ++i)
+    ground_points_.resize(data_->ground_points.size());
+    for(size_t i = 0; i < data_->ground_points.size(); ++i)
     {
-      points_[i] = data_->points[i];
+      ground_points_[i] = data_->ground_points[i];
     }
-    if(points_.size())
+    if(!ground_points_.empty())
     {
+      ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).update(ground_points_, t_);
     }
-    ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).update(points_, t_);
     new_ground_data_ = false;
   }
 }
@@ -254,6 +254,25 @@ void CameraSensor::addToGUI(const mc_control::MCController & ctl,
                                 return traj;
                               }));
 
+  gui.addElement(points_category,
+    mc_rtc::gui::Trajectory("Ground reconstructed",
+      [this, &ctl]()
+      {
+        std::vector<Eigen::Vector3d> points;
+        {
+          ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+          points = ground_points_;
+        }
+
+        if(points.empty())
+        {
+          return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
+        }
+
+        return points;
+      })
+  );
+
   gui.addPlot(fmt::format("CameraSensor::{}", name_), mc_rtc::gui::plot::X("t", [this]() { return t_; }),
               mc_rtc::gui::plot::Y(
                   "range", [this]() { return points_.empty() ? 0. : points_[0].z(); }, mc_rtc::gui::Color::Red));
@@ -280,6 +299,14 @@ void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
             ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->mtx);
             if(data_->data_ready->timed_wait(lck, pclock::universal_time() + ptime::seconds(1)))
             {
+              {
+                ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+                points_.resize(data_->points.size());
+                for(size_t i = 0; i < data_->points.size(); ++i)
+                {
+                  points_[i] = data_->points[i];
+                }
+              }
               data_->skip = false;
               if(ctl.datastore().has("SoftFootState::GetState"))
               {

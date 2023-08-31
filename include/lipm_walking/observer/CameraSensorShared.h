@@ -55,6 +55,7 @@ struct CameraSensorShared
   using v3d_allocator = ipc::allocator<Eigen::Vector3d, ipc::managed_shared_memory::segment_manager>;
   ipc::interprocess_mutex points_mtx;
   std::vector<Eigen::Vector3d, v3d_allocator> points;
+  std::vector<Eigen::Vector3d, v3d_allocator> ground_points;
 
   /** Register a new client (client.isAlive() must be false) */
   void newClient(pid_t pid);
