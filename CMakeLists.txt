@@ -81,9 +81,10 @@ add_project_dependency(trajectory_collection REQUIRED)
 find_package(catkin REQUIRED COMPONENTS roscpp variable_stiffness)
 find_package(mc_mujoco REQUIRED)
 
-add_subdirectory(3rd-party/qhull EXCLUDE_FROM_ALL)
 set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(QHULL_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
 set(SERIAL_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+add_subdirectory(3rd-party/qhull EXCLUDE_FROM_ALL)
 add_subdirectory(3rd-party/CppLinuxSerial EXCLUDE_FROM_ALL)
 add_subdirectory(3rd-party/serial EXCLUDE_FROM_ALL)
 
