@@ -95,8 +95,8 @@ void CameraSensor::updateServerOnline()
 void CameraSensor::update(mc_control::MCController & ctl)
 {
   t_ += ctl.solver().dt();
+  publish_plot(*ctl.gui());
   updateServerOnline();
-  // Note: new_ground_data will be updated in \ref publish_plot_data
   if(new_ground_data_)
   {
     ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
@@ -109,16 +109,12 @@ void CameraSensor::update(mc_control::MCController & ctl)
     {
       ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).update(ground_points_, t_);
     }
+    new_ground_data_ = false;
   }
 }
 
 void CameraSensor::publish_plot_data(std::vector<std::array<double, 2>> & points)
 {
-  if(!new_ground_data_)
-  {
-    return;
-  }
-  new_ground_data_ = false;
   points.reserve(ground_points_.size());
   for(const auto & p : ground_points_)
   {
@@ -169,6 +165,15 @@ void CameraSensor::addToGUI(const mc_control::MCController & ctl,
       category,
       mc_rtc::gui::Checkbox(
           "Online", [this]() { return serverOnline_; }, []() {}),
+      mc_rtc::gui::Button("Show ground profile",
+                          [this]()
+                          {
+                            if(publish_plot_ || published_plot_)
+                            {
+                              mc_rtc::log::warning("Already publishing");
+                            }
+                            publish_plot_ = true;
+                          }),
       mc_rtc::gui::Label("Range [m]", [this]() { return points_.empty() ? 0. : points_[0].z(); }),
       mc_rtc::gui::Point3D("Point [3D]", [this]() { return points_.empty() ? Eigen::Vector3d::Zero() : points_[0]; }),
       mc_rtc::gui::Label("nr points", [this]() { return points_.size(); }),
@@ -286,10 +291,24 @@ void CameraSensor::addToGUI(const mc_control::MCController & ctl,
 
                                 return points;
                               }));
+}
 
-  gui.addXYPlot(fmt::format("CameraSensor::{}::GroundProfile", name_),
-                mc_rtc::gui::plot::XYChunk(
-                    "profile", [this](auto & points) { publish_plot_data(points); }, mc_rtc::gui::Color::Red));
+void CameraSensor::publish_plot(mc_rtc::gui::StateBuilder & gui)
+{
+  auto plot_name = [this]() { return fmt::format("CameraSensor::{}::GroundProfile", name_); };
+  if(published_plot_)
+  {
+    published_plot_ = false;
+    gui.removePlot(plot_name());
+  }
+  if(publish_plot_)
+  {
+    gui.addXYPlot(plot_name(),
+                  mc_rtc::gui::plot::XYChunk(
+                      "profile", [this](auto & points) { publish_plot_data(points); }, mc_rtc::gui::Color::Red));
+    publish_plot_ = false;
+    published_plot_ = true;
+  }
 }
 
 void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)

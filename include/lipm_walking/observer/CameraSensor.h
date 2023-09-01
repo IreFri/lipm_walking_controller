@@ -88,7 +88,10 @@ protected:
 
   void updateServerOnline();
 
+  bool publish_plot_ = false;
+  bool published_plot_ = false;
   void publish_plot_data(std::vector<std::array<double, 2>> & points);
+  void publish_plot(mc_rtc::gui::StateBuilder & gui);
 };
 
 } // namespace lipm_walking
