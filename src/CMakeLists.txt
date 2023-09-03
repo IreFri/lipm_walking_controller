@@ -94,7 +94,7 @@ add_executable(CameraSensorResetShm observer/CameraSensorResetShm.cpp)
 target_link_libraries(CameraSensorResetShm PUBLIC CameraSensorShared)
 
 add_executable(CameraSensorServer observer/CameraSensorServer.cpp)
-target_link_libraries(CameraSensorServer PUBLIC CameraSensorShared Open3D::Open3D ceres ${PCL_LIBRARIES} ${realsense2_LIBRARY})
+target_link_libraries(CameraSensorServer PUBLIC CameraSensorShared Open3D::Open3D ceres ${realsense2_LIBRARY})
 
 install(TARGETS CameraSensorResetShm CameraSensorServer DESTINATION bin)
 
