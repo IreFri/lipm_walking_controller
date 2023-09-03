@@ -30,7 +30,9 @@ ipc::managed_shared_memory & get_shm()
 
 CameraSensorShared::CameraSensorShared(CameraSensorShared::CtorKey)
 : points(CameraSensorShared::v3d_allocator(get_shm().get_segment_manager())),
-  ground_points(CameraSensorShared::v3d_allocator(get_shm().get_segment_manager()))
+  ground_points(CameraSensorShared::v3d_allocator(get_shm().get_segment_manager())),
+  aligned_points(CameraSensorShared::v3d_allocator(get_shm().get_segment_manager())),
+  selected_points(CameraSensorShared::v3d_allocator(get_shm().get_segment_manager()))
 {
 }
 

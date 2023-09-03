@@ -41,11 +41,14 @@ private:
   /** Acquisition and computation data */
   std::mutex points_mtx_;
   std::vector<Eigen::Vector3d> points_;
-  std::shared_ptr<open3d::geometry::PointCloud> pc_estimated_ground_points_;
-  std::shared_ptr<open3d::geometry::PointCloud> pc_transformed_estimated_ground_points_;
-  std::shared_ptr<open3d::geometry::PointCloud> pc_full_ground_reconstructed_points_;
-  std::vector<Eigen::Vector3d> corrected_ground_points_;
   std::vector<Eigen::Vector3d> new_camera_points_;
+  std::vector<Eigen::Vector3d> pre_new_camera_points_;
+  std::vector<Eigen::Vector3d> pre_new_ground_points_;
+  std::vector<Eigen::Vector3d> new_ground_points_;
+  std::vector<Eigen::Vector3d> ground_points_;
+
+  double previous_pitch_ = 0.;
+  double previous_t_z_ = 0.;
 
   std::atomic<bool> run_ = false;
 

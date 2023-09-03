@@ -105,6 +105,16 @@ void CameraSensor::update(mc_control::MCController & ctl)
     {
       ground_points_[i] = data_->ground_points[i];
     }
+    aligned_points_.resize(data_->aligned_points.size());
+    for(size_t i = 0; i < data_->aligned_points.size(); ++i)
+    {
+      aligned_points_[i] = data_->aligned_points[i];
+    }
+    selected_points_.resize(data_->selected_points.size());
+    for(size_t i = 0; i < data_->selected_points.size(); ++i)
+    {
+      selected_points_[i] = data_->selected_points[i];
+    }
     if(!ground_points_.empty())
     {
       ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).update(ground_points_, t_);
@@ -150,6 +160,69 @@ void CameraSensor::addToLogger(const mc_control::MCController &, mc_rtc::Logger 
                                       [](const Eigen::Vector3d & v) { return v.z(); });
                        return d;
                      });
+  logger.addLogEntry(category + "_ground_points_x", this,
+                     [this]() -> std::vector<double>
+                     {
+                       std::vector<double> d;
+                       std::transform(ground_points_.begin(), ground_points_.end(), std::back_inserter(d),
+                                      [](const Eigen::Vector3d & v) { return v.x(); });
+                       return d;
+                     });
+  logger.addLogEntry(category + "_ground_points_y", this,
+                     [this]() -> std::vector<double>
+                     {
+                       std::vector<double> d;
+                       std::transform(ground_points_.begin(), ground_points_.end(), std::back_inserter(d),
+                                      [](const Eigen::Vector3d & v) { return v.y(); });
+                       return d;
+                     });
+  logger.addLogEntry(category + "_ground_points_z", this,
+                     [this]() -> std::vector<double>
+                     {
+                       std::vector<double> d;
+                       std::transform(ground_points_.begin(), ground_points_.end(), std::back_inserter(d),
+                                      [](const Eigen::Vector3d & v) { return v.z(); });
+                       return d;
+                     });
+  logger.addLogEntry(category + "_world_points_x", this,
+                     [this]() -> std::vector<double>
+                     {
+                       std::vector<double> d;
+                       std::transform(points_.begin(), points_.end(), std::back_inserter(d),
+                                      [this](const Eigen::Vector3d & v)
+                                      {
+                                        const sva::PTransformd X_s_p(v);
+                                        const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * data_->X_0_b;
+                                        return X_0_p.translation().x();
+                                      });
+                       return d;
+                     });
+  logger.addLogEntry(category + "_world_points_y", this,
+                     [this]() -> std::vector<double>
+                     {
+                       std::vector<double> d;
+                       std::transform(points_.begin(), points_.end(), std::back_inserter(d),
+                                      [this](const Eigen::Vector3d & v)
+                                      {
+                                        const sva::PTransformd X_s_p(v);
+                                        const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * data_->X_0_b;
+                                        return X_0_p.translation().y();
+                                      });
+                       return d;
+                     });
+  logger.addLogEntry(category + "_world_points_z", this,
+                     [this]() -> std::vector<double>
+                     {
+                       std::vector<double> d;
+                       std::transform(points_.begin(), points_.end(), std::back_inserter(d),
+                                      [this](const Eigen::Vector3d & v)
+                                      {
+                                        const sva::PTransformd X_s_p(v);
+                                        const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * data_->X_0_b;
+                                        return X_0_p.translation().z();
+                                      });
+                       return d;
+                     });
 }
 
 void CameraSensor::removeFromLogger(mc_rtc::Logger & logger, const std::string &)
@@ -165,6 +238,12 @@ void CameraSensor::addToGUI(const mc_control::MCController & ctl,
       category,
       mc_rtc::gui::Checkbox(
           "Online", [this]() { return serverOnline_; }, []() {}),
+      mc_rtc::gui::Button("Reset ground",
+                          [this]()
+                          {
+                            ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+                            data_->reset_ground = true;
+                          }),
       mc_rtc::gui::Button("Show ground profile",
                           [this]()
                           {
@@ -276,12 +355,52 @@ void CameraSensor::addToGUI(const mc_control::MCController & ctl,
   gui.addElement(
       points_category,
       mc_rtc::gui::Trajectory("Ground reconstructed",
+                              {mc_rtc::gui::Color::Magenta},
                               [this, &ctl]()
                               {
                                 std::vector<Eigen::Vector3d> points;
                                 {
                                   ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
                                   points = ground_points_;
+                                }
+
+                                if(points.empty())
+                                {
+                                  return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
+                                }
+
+                                return points;
+                              }));
+  gui.addElement(
+      points_category,
+      mc_rtc::gui::Trajectory("Selected points to align",
+                              {mc_rtc::gui::Color::Blue},
+                              [this, &ctl]()
+                              {
+                                std::vector<Eigen::Vector3d> points;
+                                {
+                                  ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+                                  points = selected_points_;
+                                }
+
+                                if(points.empty())
+                                {
+                                  return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
+                                }
+
+                                return points;
+                              }));
+
+  gui.addElement(
+      points_category,
+      mc_rtc::gui::Trajectory("Align points with picth and t_z",
+                              {mc_rtc::gui::Color::Gray},
+                              [this, &ctl]()
+                              {
+                                std::vector<Eigen::Vector3d> points;
+                                {
+                                  ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+                                  points = aligned_points_;
                                 }
 
                                 if(points.empty())

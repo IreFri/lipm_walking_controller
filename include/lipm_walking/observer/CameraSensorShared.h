@@ -56,6 +56,9 @@ struct CameraSensorShared
   ipc::interprocess_mutex points_mtx;
   std::vector<Eigen::Vector3d, v3d_allocator> points;
   std::vector<Eigen::Vector3d, v3d_allocator> ground_points;
+  std::vector<Eigen::Vector3d, v3d_allocator> aligned_points;
+  std::vector<Eigen::Vector3d, v3d_allocator> selected_points;
+  bool reset_ground = false;
 
   /** Register a new client (client.isAlive() must be false) */
   void newClient(pid_t pid);
