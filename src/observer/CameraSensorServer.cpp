@@ -310,6 +310,7 @@ void CameraSensorServer::do_computation()
     if(data_->reset_ground)
     {
       ground_points_.clear();
+      pre_new_ground_points_.clear();
       data_->ground_points.clear();
       data_->reset_ground = false;
     }
@@ -391,8 +392,18 @@ void CameraSensorServer::do_computation()
                          duration.count() / 1000.);
   }
 
+  // If no selected points, we skip the estimation
   if(selected_points.empty())
   {
+    mc_rtc::log::warning("Skip the estimation as there are no selected points for the alignement");
+    data_->result_ready->notify_all();
+    return;
+  }
+
+  // If the selected line only contains data from "far" away we discard also
+  if((selected_points[0] - pre_new_camera_points_[0]).norm() > 0.05)
+  {
+    mc_rtc::log::warning("Skip the estimation as the selected line is 'too far' for the alignement");
     data_->result_ready->notify_all();
     return;
   }
