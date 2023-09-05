@@ -252,11 +252,13 @@ void CameraSensorServer::acquisition()
 
     {
       ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+      std::cout << "Updating data_->points" << std::endl;
       data_->points.resize(points.size());
       for(size_t i = 0; i < points.size(); ++i)
       {
         data_->points[i] = points[i];
       }
+      std::cout << "New size is " << data_->points.size() << std::endl;
     }
 
     if(data_->client.isAlive())

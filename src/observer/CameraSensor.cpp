@@ -451,9 +451,11 @@ void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
             ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->mtx);
             if(data_->data_ready->timed_wait(lck, pclock::universal_time() + ptime::seconds(1)))
             {
-              {
+               {
                 ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+                std::cout << "Getting data from the server " << std::endl;
                 points_.resize(data_->points.size());
+                std::cout << "New points with size of " << points_.size() << std::endl;
                 for(size_t i = 0; i < data_->points.size(); ++i)
                 {
                   points_[i] = data_->points[i];
