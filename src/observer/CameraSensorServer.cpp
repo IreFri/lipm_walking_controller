@@ -218,7 +218,7 @@ void CameraSensorServer::acquisition()
     const size_t half_kernel_size = kernel_size_ / 2;
     std::vector<Eigen::Vector3d> points;
     const int offset = 35;
-    for(size_t i = half_width + half_kernel_size - offset; i < width - half_kernel_size - offset; ++i)
+    for(size_t i = half_width * 0.5 + half_kernel_size; i < width - half_kernel_size - offset; ++i)
     {
       pixel[0] = static_cast<float>(i);
       pixel[1] = static_cast<float>(half_height);
@@ -473,10 +473,9 @@ void CameraSensorServer::do_computation()
     {
       const auto & p_0 = new_ground_points_[i - 1];
       const auto & p_1 = new_ground_points_[i];
-      const double gradient = (p_1.z() - p_0.z()) / (p_1.x() - p_0.x());
       if((p_1 - p_0).norm() > 0.005)
       {
-        if(cluster.size() > 10)
+        if(cluster.size() > 5)
         {
           filtered_new_ground_points.insert(filtered_new_ground_points.end(), cluster.begin(), cluster.end());
         }
@@ -484,7 +483,72 @@ void CameraSensorServer::do_computation()
       }
       cluster.push_back(new_ground_points_[i]);
     }
-    std::cout << std::endl;
+
+    std::shared_ptr<open3d::geometry::PointCloud> target(new open3d::geometry::PointCloud);
+    target->points_.resize(ground_points_.size());
+    for(size_t i = 0; i < ground_points_.size(); ++i)
+    {
+      target->points_[i].x() = ground_points_[i].x();
+      target->points_[i].y() = 0.;
+      target->points_[i].z() = ground_points_[i].z();
+    }
+
+    const auto front = Eigen::Vector3d(data_->X_0_b.translation().x() + 0.0, - 0.05, -0.10);
+    const auto back = Eigen::Vector3d(Eigen::Vector3d(data_->X_0_b.translation().x() + 0.55, + 0.05, 0.10));
+    target = target->Crop(open3d::geometry::AxisAlignedBoundingBox(front, back));
+
+    if(!filtered_new_ground_points.empty() && target->points_.size() > 10)
+    {
+      std::shared_ptr<open3d::geometry::PointCloud> source(new open3d::geometry::PointCloud);
+      source->points_.resize(filtered_new_ground_points.size());
+      for(size_t i = 0; i < filtered_new_ground_points.size(); ++i)
+      {
+        source->points_[i].x() = filtered_new_ground_points[i].x();
+        source->points_[i].y() = 0.;
+        source->points_[i].z() = filtered_new_ground_points[i].z();
+      }
+
+      // ICP For matching
+      auto result = open3d::pipelines::registration::RegistrationGeneralizedICP(
+          *source, *target, 0.05, Eigen::Matrix4d::Identity(),
+          open3d::pipelines::registration::TransformationEstimationForGeneralizedICP(),
+          open3d::pipelines::registration::ICPConvergenceCriteria(1e-6, 1e-6, 15));
+
+      // Apply transformation
+      source->Transform(result.transformation_);
+
+      std::cout << mc_rbdyn::rpyFromMat(result.transformation_.block<3, 3>(0, 0)).transpose() << std::endl;
+      if(std::abs(mc_rbdyn::rpyFromMat(result.transformation_.block<3, 3>(0, 0)).y()) > 0.0872665)
+      {
+        mc_rtc::log::error("CLEAR");
+        filtered_new_ground_points.clear();
+      }
+      else
+      {
+        auto distances = source->ComputePointCloudDistance(*target);
+        std::sort(distances.begin(), distances.end());
+        double sum = 0.;
+        for(size_t i = distances.size() - 20; i < distances.size(); ++i)
+        {
+          sum += std::abs(distances[i]);
+        }
+        sum /= 20.;
+
+        if(sum < 0.015)
+        {
+          for(size_t i = 0; i < filtered_new_ground_points.size(); ++i)
+          {
+            filtered_new_ground_points[i].x() = source->points_[i].x();
+            filtered_new_ground_points[i].z() = source->points_[i].z();
+          }
+        }
+        else
+        {
+          mc_rtc::log::error("SHOULD CLEAR?");
+          // filtered_new_ground_points.clear();
+        }
+      }
+    }
 
     open3d::geometry::PointCloud open3d_pc;
     ground_points_.insert(ground_points_.end(), filtered_new_ground_points.begin(), filtered_new_ground_points.end());
