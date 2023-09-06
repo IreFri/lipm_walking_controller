@@ -243,6 +243,7 @@ void CameraSensor::addToGUI(const mc_control::MCController & ctl,
                           {
                             ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
                             data_->reset_ground = true;
+                            ground_points_.clear();
                           }),
       mc_rtc::gui::Button("Show ground profile",
                           [this]()

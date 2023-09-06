@@ -300,10 +300,10 @@ void CameraSensorServer::computation()
 
 void CameraSensorServer::do_computation()
 {
-  // if(data_->skip)
-  // {
-  //   return;
-  // }
+  if(data_->skip)
+  {
+    return;
+  }
 
   {
     ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
