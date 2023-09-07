@@ -1581,7 +1581,18 @@ void SoftFootState::computeFootLandingAngle(const Foot & current_moving_foot, co
   double dz = p_1.z() - p_0.z();
   double dx = p_1.x() - p_0.x();
 
+  const double bound_for_angle = 25. * M_PI / 180.; // [rad]
+  // foot_data_[current_moving_foot].angle = std::max(std::min(-std::atan(dz / dx), bound_for_angle), -bound_for_angle);
+
   foot_data_[current_moving_foot].angle = -std::atan(dz / dx);
+  if(foot_data_[current_moving_foot].angle < -bound_for_angle)
+  {
+    foot_data_[current_moving_foot].angle = -bound_for_angle;
+  }
+  else if(foot_data_[current_moving_foot].angle > bound_for_angle)
+  {
+    foot_data_[current_moving_foot].angle = bound_for_angle;
+  }
 
   Eigen::Vector3d highest_point_on_convex(0., 0., std::numeric_limits<double>::lowest());
   const double min_x_foot = (sva::PTransformd(Eigen::Vector3d(-foot_length_ * 0.5 + landing_to_foot_middle_offset_ , 0., 0.)) * sva::PTransformd(landing)).translation().x();
