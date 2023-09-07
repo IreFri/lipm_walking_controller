@@ -1587,10 +1587,12 @@ void SoftFootState::computeFootLandingAngle(const Foot & current_moving_foot, co
   foot_data_[current_moving_foot].angle = -std::atan(dz / dx);
   if(foot_data_[current_moving_foot].angle < -bound_for_angle)
   {
+    mc_rtc::log::warning("[SoftFootState::computeFootLandingAngle] Clamp computed angle {} to {}", foot_data_[current_moving_foot].angle, -bound_for_angle);
     foot_data_[current_moving_foot].angle = -bound_for_angle;
   }
   else if(foot_data_[current_moving_foot].angle > bound_for_angle)
   {
+    mc_rtc::log::warning("[SoftFootState::computeFootLandingAngle] Clamp computed angle {} to {}", foot_data_[current_moving_foot].angle, bound_for_angle);
     foot_data_[current_moving_foot].angle = bound_for_angle;
   }
 
