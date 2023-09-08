@@ -550,6 +550,84 @@ void CameraSensorServer::do_computation()
       }
     }
 
+    {
+      auto start = std::chrono::high_resolution_clock::now();
+
+      std::vector<Eigen::Vector3d> selected_line;
+
+      std::vector<std::vector<Eigen::Vector3d>> lines;
+      lines.push_back(std::vector<Eigen::Vector3d>{});
+
+      for(size_t i = 1; i < filtered_new_ground_points.size(); ++i)
+      {
+        const auto & p_0 = filtered_new_ground_points[i - 1];
+        const auto & p_1 = filtered_new_ground_points[i];
+        const double gradient = (p_1.z() - p_0.z()) / (p_1.x() - p_0.x());
+        if(std::abs(gradient) > 1. || (p_1.x() - p_0.x()) > 0.02)
+        {
+          lines.push_back(std::vector<Eigen::Vector3d>{});
+        }
+        lines.back().push_back(filtered_new_ground_points[i]);
+      }
+
+      for(size_t i = 0; i < lines.size(); ++i)
+      {
+        if(!lines[i].empty())
+        {
+          const auto & p_0 = lines[i].front();
+          const auto & p_1 = lines[i].back();
+          const double length = (p_1 - p_0).norm();
+          if(length > 0.05)
+          {
+            selected_line.insert(selected_line.end(), lines[i].begin(), lines[i].end());
+          }
+        }
+      }
+
+      double pitch = 0.;
+      double t_z = 0.;
+
+      ceres::Problem problem;
+      for(const auto& T_0_p: selected_line)
+      {
+        const sva::PTransformd X_0_p(T_0_p);
+        const sva::PTransformd X_s_p = X_0_p * (data_->X_b_s * data_->X_0_b).inv();
+        ceres::CostFunction* cost_function = PitchZCostFunctor::Create(X_s_p, data_->X_0_b,data_-> X_b_s);
+        problem.AddResidualBlock(cost_function,  new ceres::CauchyLoss(0.5), &pitch, &t_z);
+      }
+
+      ceres::Solver::Options options;
+      options.linear_solver_type = ceres::DENSE_QR;
+      ceres::Solver::Summary summary;
+      ceres::Solve(options, &problem, &summary);
+
+
+      const sva::PTransformd X_b_b(sva::RotY(pitch).cast<double>(), Eigen::Vector3d(0., 0., t_z));
+
+      // Compute the 3D point in world frame
+      {
+        new_ground_points_.reserve(selected_line.size());
+        new_ground_points_.clear();
+        for(const auto& T_0_p: filtered_new_ground_points)
+        {
+          // From camera frame to world frame
+          const sva::PTransformd _X_0_p(T_0_p);
+          const sva::PTransformd X_s_p = _X_0_p * (data_->X_b_s * data_->X_0_b).inv();
+          const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * X_b_b * data_->X_0_b;
+          if(X_0_p.translation().z() > -0.002)
+          {
+            new_ground_points_.push_back(X_0_p.translation());
+          }
+        }
+        filtered_new_ground_points = new_ground_points_;
+      }
+
+      auto stop = std::chrono::high_resolution_clock::now();
+      auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+      mc_rtc::log::warning("[Step 2-a][Re-alignment] It tooks {} microseconds -> {} milliseconds", duration.count(),
+                          duration.count() / 1000.);
+    }
+
     open3d::geometry::PointCloud open3d_pc;
     ground_points_.insert(ground_points_.end(), filtered_new_ground_points.begin(), filtered_new_ground_points.end());
     open3d_pc.points_ = ground_points_;
