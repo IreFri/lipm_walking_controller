@@ -305,6 +305,120 @@ void CameraSensorServer::do_computation()
     return;
   }
 
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //// fromCameraToWorldFrameWithAlignement
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  auto fromCameraToWorldFrameWithAlignement = [this](const std::vector<Eigen::Vector3d> & camera_points, double pitch, double t_z)
+  {
+    std::vector<Eigen::Vector3d> ground_points;
+    const sva::PTransformd X_b_b(sva::RotY(pitch).cast<double>(), Eigen::Vector3d(0., 0., t_z));
+
+    for(int i = camera_points.size() - 1; i >= 0; --i)
+    {
+      // From camera frame to world frame
+      const sva::PTransformd X_s_p(camera_points[i]);
+      const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * X_b_b * data_->X_0_b;
+      ground_points.push_back(X_0_p.translation());
+    }
+
+    std::sort(ground_points.begin(), ground_points.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+    size_t idx = 0;
+    while (idx < ground_points.size() && ground_points[idx].x() - (data_->X_b_s * data_->X_0_b).translation().x() < 0.30)
+    {
+      ++idx;
+    }
+    ground_points.resize(idx);
+
+    return ground_points;
+  };
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //// selectLineForCeresAlignement
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  auto selectLineForCeresAlignement = [](const std::vector<Eigen::Vector3d> & ground_points)
+  {
+    std::vector<Eigen::Vector3d> selected_line;
+
+    std::vector<std::vector<Eigen::Vector3d>> lines;
+    lines.push_back(std::vector<Eigen::Vector3d>{});
+
+    for(size_t i = 1; i < ground_points.size(); ++i)
+    {
+      const auto & p_0 = ground_points[i - 1];
+      const auto & p_1 = ground_points[i];
+      const double gradient = (p_1.z() - p_0.z()) / (p_1.x() - p_0.x());
+      if(std::abs(gradient) > 0.25 || (p_1.x() - p_0.x()) > 0.02)
+      {
+        lines.push_back(std::vector<Eigen::Vector3d>{});
+      }
+      lines.back().push_back(ground_points[i]);
+    }
+
+    for(size_t i = 0; i < lines.size(); ++i)
+    {
+      if(!lines[i].empty())
+      {
+        const auto & p_0 = lines[i].front();
+        const auto & p_1 = lines[i].back();
+        const double length = p_1.x() - p_0.x();
+        if(length > 0.05)
+        {
+          selected_line.insert(selected_line.end(), lines[i].begin(), lines[i].end());
+        }
+      }
+    }
+    return selected_line;
+  };
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //// computePitchAndTzWithCeres
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  auto computePitchAndTzWithCeres = [this](const std::vector<Eigen::Vector3d> & selected_line, double & pitch, double & t_z)
+  {
+    pitch = 0.;
+    t_z = 0.;
+
+    ceres::Problem problem;
+    for(const auto& T_0_p: selected_line)
+    {
+      const sva::PTransformd X_0_p(T_0_p);
+      const sva::PTransformd X_s_p = X_0_p * (data_->X_b_s * data_->X_0_b).inv();
+      ceres::CostFunction* cost_function = PitchZCostFunctor::Create(X_s_p, data_->X_0_b, data_->X_b_s);
+      problem.AddResidualBlock(cost_function,  new ceres::CauchyLoss(0.5), &pitch, &t_z);
+    }
+
+    ceres::Solver::Options options;
+    options.linear_solver_type = ceres::DENSE_QR;
+    ceres::Solver::Summary summary;
+    ceres::Solve(options, &problem, &summary);
+  };
+
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //// reAlignGround
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  auto reAlignGround = [this](const std::vector<Eigen::Vector3d> & ground_points, double pitch, double t_z)
+  {
+    std::vector<Eigen::Vector3d> _ground_points;
+    const sva::PTransformd X_b_b(sva::RotY(pitch).cast<double>(), Eigen::Vector3d(0., 0., t_z));
+    for(const auto& T_0_p: ground_points)
+    {
+      // From camera frame to world frame
+      const sva::PTransformd _X_0_p(T_0_p);
+      const sva::PTransformd X_s_p = _X_0_p * (data_->X_b_s * data_->X_0_b).inv();
+      const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * X_b_b * data_->X_0_b;
+      // if(X_0_p.translation().z() > -0.002)
+      {
+        _ground_points.push_back(X_0_p.translation());
+      }
+    }
+
+    std::sort(_ground_points.begin(), _ground_points.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+
+    return _ground_points;
+  };
+
+
   {
     ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
     if(data_->reset_ground)
@@ -323,166 +437,58 @@ void CameraSensorServer::do_computation()
     new_ground_points_.reserve(new_camera_points_.size());
   }
 
+  auto start = std::chrono::high_resolution_clock::now();
   {
-    mc_rtc::log::info("[Step 0] Use previous_pitch and previous_t_z");
     auto start = std::chrono::high_resolution_clock::now();
 
-    pre_new_ground_points_.clear();
-    pre_new_camera_points_.clear();
-    const sva::PTransformd X_b_b(sva::RotY(previous_pitch_).cast<double>(), Eigen::Vector3d(0., 0., previous_t_z_));
-
-    for(int i = new_camera_points_.size() - 1; i >= 0; --i)
-    {
-      // From camera frame to world frame
-      const sva::PTransformd X_s_p(new_camera_points_[i]);
-      const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * X_b_b * data_->X_0_b;
-      pre_new_camera_points_.push_back(X_s_p.translation());
-      pre_new_ground_points_.push_back(X_0_p.translation());
-    }
+    pre_new_ground_points_ = fromCameraToWorldFrameWithAlignement(new_camera_points_, previous_pitch_, previous_t_z_);
 
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-    mc_rtc::log::warning("[Step 0] It tooks {} microseconds -> {} milliseconds", duration.count(),
-                         duration.count() / 1000.);
+    mc_rtc::log::info("Took {} ms for [Align using previous pitch and t_z]", static_cast<double>(duration.count()) / 1000.);
   }
 
-  std::vector<Eigen::Vector3d> selected_points;
   std::vector<Eigen::Vector3d> selected_line;
   {
-    mc_rtc::log::info("[Step 1] Extract ground component");
     auto start = std::chrono::high_resolution_clock::now();
 
-    std::vector<std::vector<Eigen::Vector3d>> lines;
-    lines.push_back(std::vector<Eigen::Vector3d>{});
-
-    std::vector<std::vector<Eigen::Vector3d>> points;
-    points.push_back(std::vector<Eigen::Vector3d>{});
-    for(size_t i = 1; i < pre_new_ground_points_.size(); ++i)
-    {
-      const auto & p_0 = pre_new_ground_points_[i - 1];
-      const auto & p_1 = pre_new_ground_points_[i];
-      const double gradient = (p_1.z() - p_0.z()) / (p_1.x() - p_0.x());
-      if(std::abs(gradient) > 1. || (p_1.x() - p_0.x()) > 0.02)
-      {
-        lines.push_back(std::vector<Eigen::Vector3d>{});
-        points.push_back(std::vector<Eigen::Vector3d>{});
-      }
-      lines.back().push_back(pre_new_ground_points_[i]);
-      points.back().push_back(pre_new_camera_points_[i]);
-    }
-
-    for(size_t i = 0; i < lines.size(); ++i)
-    {
-      if(!lines[i].empty())
-      {
-        const auto & p_0 = lines[i].front();
-        const auto & p_1 = lines[i].back();
-        const double length = (p_1 - p_0).norm();
-        if(length > 0.05)
-        {
-          selected_points.insert(selected_points.end(), points[i].begin(), points[i].end());
-          selected_line.insert(selected_line.end(), lines[i].begin(), lines[i].end());
-        }
-      }
-    }
+    selected_line = selectLineForCeresAlignement(pre_new_ground_points_);
 
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-    mc_rtc::log::warning("[Step 0] It tooks {} microseconds -> {} milliseconds", duration.count(),
-                         duration.count() / 1000.);
+    mc_rtc::log::info("Took {} ms for [Select line for Ceres]", static_cast<double>(duration.count()) / 1000.);
   }
 
-  // If no selected points, we skip the estimation
-  if(selected_points.empty())
+    // If no selected points, we skip the estimation
+  if(selected_line.empty())
   {
-    mc_rtc::log::warning("Skip the estimation as there are no selected points for the alignement");
-    data_->result_ready->notify_all();
-    return;
-  }
-
-  // If the selected line only contains data from "far" away we discard also
-  if((selected_points[0] - pre_new_camera_points_[0]).norm() > 0.05)
-  {
-    mc_rtc::log::warning("Skip the estimation as the selected line is 'too far' for the alignement");
+    mc_rtc::log::info("Skip the estimation as there are no selected line for the alignement");
     data_->result_ready->notify_all();
     return;
   }
 
   {
-    mc_rtc::log::info("[Step 1] Estimate the z - pitch to bring back to 0");
     auto start = std::chrono::high_resolution_clock::now();
-    double pitch = 0.;
-    double t_z = 0.;
 
-    ceres::Problem problem;
-    for(const auto& point: selected_points)
-    {
-      const sva::PTransformd X_0_p = sva::PTransformd(point) * data_->X_b_s * data_->X_0_b;
-      const sva::PTransformd X_s_p(point);
-      ceres::CostFunction* cost_function = PitchZCostFunctor::Create(X_s_p, data_->X_0_b, data_->X_b_s);
-      problem.AddResidualBlock(cost_function,  new ceres::CauchyLoss(0.5), &pitch, &t_z);
-    }
+    computePitchAndTzWithCeres(selected_line, previous_pitch_, previous_t_z_);
 
-    ceres::Solver::Options options;
-    options.linear_solver_type = ceres::DENSE_QR;
-    ceres::Solver::Summary summary;
-    ceres::Solve(options, &problem, &summary);
-
-    // Update
-    previous_pitch_ = pitch;
-    previous_t_z_ = t_z;
-
-    const sva::PTransformd X_b_b(sva::RotY(pitch).cast<double>(), Eigen::Vector3d(0., 0., t_z));
-
-    // Compute the 3D point in world frame
-    {
-      const std::lock_guard<std::mutex> lock(points_mtx_);
-      data_->aligned_points.reserve(new_camera_points_.size());
-      data_->aligned_points.clear();
-      new_ground_points_.reserve(new_camera_points_.size());
-      new_ground_points_.clear();
-      for(const auto& point: new_camera_points_)
-      {
-        // From camera frame to world frame
-        const sva::PTransformd X_s_p(point);
-        const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * X_b_b * data_->X_0_b;
-        if(X_0_p.translation().z() > - 0.002)
-        {
-          data_->aligned_points.push_back(X_0_p.translation());
-          new_ground_points_.push_back(X_0_p.translation());
-        }
-      }
-    }
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-    mc_rtc::log::warning("[Step 1] It tooks {} microseconds -> {} milliseconds", duration.count(),
-                         duration.count() / 1000.);
+    mc_rtc::log::info("Took {} ms for [Compute pitch and t_z]", static_cast<double>(duration.count()) / 1000.);
   }
 
   {
-    mc_rtc::log::info("[Step 2] Fuse new estimated ground with global ground");
     auto start = std::chrono::high_resolution_clock::now();
 
+    new_ground_points_ = reAlignGround(pre_new_ground_points_, previous_pitch_, previous_t_z_);
 
-    std::sort(new_ground_points_.begin(), new_ground_points_.end(),
-              [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    mc_rtc::log::info("Took {} ms for [Realignement of ground]", static_cast<double>(duration.count()) / 1000.);
+  }
 
-    std::vector<Eigen::Vector3d> filtered_new_ground_points;
-    std::vector<Eigen::Vector3d> cluster;
-    for(size_t i = 1; i < new_ground_points_.size(); ++i)
-    {
-      const auto & p_0 = new_ground_points_[i - 1];
-      const auto & p_1 = new_ground_points_[i];
-      if((p_1 - p_0).norm() > 0.005)
-      {
-        if(cluster.size() > 5)
-        {
-          filtered_new_ground_points.insert(filtered_new_ground_points.end(), cluster.begin(), cluster.end());
-        }
-        cluster.clear();
-      }
-      cluster.push_back(new_ground_points_[i]);
-    }
+  {
+    auto start = std::chrono::high_resolution_clock::now();
 
     std::shared_ptr<open3d::geometry::PointCloud> target(new open3d::geometry::PointCloud);
     target->points_.resize(ground_points_.size());
@@ -497,15 +503,15 @@ void CameraSensorServer::do_computation()
     const auto back = Eigen::Vector3d(Eigen::Vector3d(data_->X_0_b.translation().x() + 0.55, + 0.05, 0.10));
     target = target->Crop(open3d::geometry::AxisAlignedBoundingBox(front, back));
 
-    if(!filtered_new_ground_points.empty() && target->points_.size() > 10)
+    if(!new_ground_points_.empty() && target->points_.size() > 10)
     {
       std::shared_ptr<open3d::geometry::PointCloud> source(new open3d::geometry::PointCloud);
-      source->points_.resize(filtered_new_ground_points.size());
-      for(size_t i = 0; i < filtered_new_ground_points.size(); ++i)
+      source->points_.resize(new_ground_points_.size());
+      for(size_t i = 0; i < new_ground_points_.size(); ++i)
       {
-        source->points_[i].x() = filtered_new_ground_points[i].x();
+        source->points_[i].x() = new_ground_points_[i].x();
         source->points_[i].y() = 0.;
-        source->points_[i].z() = filtered_new_ground_points[i].z();
+        source->points_[i].z() = new_ground_points_[i].z();
       }
 
       // ICP For matching
@@ -517,130 +523,146 @@ void CameraSensorServer::do_computation()
       // Apply transformation
       source->Transform(result.transformation_);
 
-      std::cout << mc_rbdyn::rpyFromMat(result.transformation_.block<3, 3>(0, 0)).transpose() << std::endl;
       if(std::abs(mc_rbdyn::rpyFromMat(result.transformation_.block<3, 3>(0, 0)).y()) > 0.0872665)
       {
-        mc_rtc::log::error("CLEAR");
-        filtered_new_ground_points.clear();
+        mc_rtc::log::error("Discard ICP result as the angle is > 5 [deg]");
+        new_ground_points_.clear();
       }
       else
       {
         auto distances = source->ComputePointCloudDistance(*target);
         std::sort(distances.begin(), distances.end());
         double sum = 0.;
-        for(size_t i = distances.size() - 20; i < distances.size(); ++i)
+        for(size_t i = 0; i < distances.size(); ++i)
         {
           sum += std::abs(distances[i]);
         }
-        sum /= 20.;
+        sum /= distances.size();
 
-        if(sum < 0.015)
+        std::cout << sum << std::endl;
+
+        if(sum < 0.005)
         {
-          for(size_t i = 0; i < filtered_new_ground_points.size(); ++i)
+          for(size_t i = 0; i < new_ground_points_.size(); ++i)
           {
-            filtered_new_ground_points[i].x() = source->points_[i].x();
-            filtered_new_ground_points[i].z() = source->points_[i].z();
+            new_ground_points_[i].x() = source->points_[i].x();
+            new_ground_points_[i].z() = source->points_[i].z();
           }
         }
         else
         {
-          mc_rtc::log::error("SHOULD CLEAR?");
-          // filtered_new_ground_points.clear();
+          mc_rtc::log::error("Do not use ICP result because > 0.005");
+          new_ground_points_.clear();
         }
       }
     }
-
-    {
-      auto start = std::chrono::high_resolution_clock::now();
-
-      std::vector<Eigen::Vector3d> selected_line;
-
-      std::vector<std::vector<Eigen::Vector3d>> lines;
-      lines.push_back(std::vector<Eigen::Vector3d>{});
-
-      for(size_t i = 1; i < filtered_new_ground_points.size(); ++i)
-      {
-        const auto & p_0 = filtered_new_ground_points[i - 1];
-        const auto & p_1 = filtered_new_ground_points[i];
-        const double gradient = (p_1.z() - p_0.z()) / (p_1.x() - p_0.x());
-        if(std::abs(gradient) > 1. || (p_1.x() - p_0.x()) > 0.02)
-        {
-          lines.push_back(std::vector<Eigen::Vector3d>{});
-        }
-        lines.back().push_back(filtered_new_ground_points[i]);
-      }
-
-      for(size_t i = 0; i < lines.size(); ++i)
-      {
-        if(!lines[i].empty())
-        {
-          const auto & p_0 = lines[i].front();
-          const auto & p_1 = lines[i].back();
-          const double length = (p_1 - p_0).norm();
-          if(length > 0.05)
-          {
-            selected_line.insert(selected_line.end(), lines[i].begin(), lines[i].end());
-          }
-        }
-      }
-
-      double pitch = 0.;
-      double t_z = 0.;
-
-      ceres::Problem problem;
-      for(const auto& T_0_p: selected_line)
-      {
-        const sva::PTransformd X_0_p(T_0_p);
-        const sva::PTransformd X_s_p = X_0_p * (data_->X_b_s * data_->X_0_b).inv();
-        ceres::CostFunction* cost_function = PitchZCostFunctor::Create(X_s_p, data_->X_0_b,data_-> X_b_s);
-        problem.AddResidualBlock(cost_function,  new ceres::CauchyLoss(0.5), &pitch, &t_z);
-      }
-
-      ceres::Solver::Options options;
-      options.linear_solver_type = ceres::DENSE_QR;
-      ceres::Solver::Summary summary;
-      ceres::Solve(options, &problem, &summary);
-
-
-      const sva::PTransformd X_b_b(sva::RotY(pitch).cast<double>(), Eigen::Vector3d(0., 0., t_z));
-
-      // Compute the 3D point in world frame
-      {
-        new_ground_points_.reserve(selected_line.size());
-        new_ground_points_.clear();
-        for(const auto& T_0_p: filtered_new_ground_points)
-        {
-          // From camera frame to world frame
-          const sva::PTransformd _X_0_p(T_0_p);
-          const sva::PTransformd X_s_p = _X_0_p * (data_->X_b_s * data_->X_0_b).inv();
-          const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * X_b_b * data_->X_0_b;
-          if(X_0_p.translation().z() > -0.002)
-          {
-            new_ground_points_.push_back(X_0_p.translation());
-          }
-        }
-        filtered_new_ground_points = new_ground_points_;
-      }
-
-      auto stop = std::chrono::high_resolution_clock::now();
-      auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-      mc_rtc::log::warning("[Step 2-a][Re-alignment] It tooks {} microseconds -> {} milliseconds", duration.count(),
-                          duration.count() / 1000.);
-    }
-
-    open3d::geometry::PointCloud open3d_pc;
-    ground_points_.insert(ground_points_.end(), filtered_new_ground_points.begin(), filtered_new_ground_points.end());
-    open3d_pc.points_ = ground_points_;
-    ground_points_ = open3d_pc.VoxelDownSample(0.005)->points_;
-
-    std::sort(ground_points_.begin(), ground_points_.end(),
-              [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
 
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-    mc_rtc::log::warning("[Step 2] It tooks {} microseconds -> {} milliseconds", duration.count(),
-                         duration.count() / 1000.);
+    mc_rtc::log::info("Took {} ms for [ICP Alignement]", static_cast<double>(duration.count()) / 1000.);
   }
+
+  selected_line = selectLineForCeresAlignement(new_ground_points_);
+  {
+    // Re-align ICP Results
+    auto start = std::chrono::high_resolution_clock::now();
+
+    // If no selected points, we skip the estimation
+    if(selected_line.empty())
+    {
+      std::cout << new_ground_points_.size() << std::endl;
+      mc_rtc::log::info("Skip the estimation as there are no selected line for the alignement");
+      data_->result_ready->notify_all();
+      return;
+    }
+
+    double pitch = 0.;
+    double t_z = 0.;
+
+    computePitchAndTzWithCeres(selected_line, pitch, t_z);
+
+    new_ground_points_ = reAlignGround(new_ground_points_, pitch, t_z);
+
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    mc_rtc::log::info("Took {} ms for [Realignement of ground after ICP]", static_cast<double>(duration.count()) / 1000.);
+  }
+
+  ground_points_.insert(ground_points_.end(), new_ground_points_.begin(), new_ground_points_.end());
+  std::sort(ground_points_.begin(), ground_points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+
+  {
+    // Filter
+    auto start = std::chrono::high_resolution_clock::now();
+
+    if(!ground_points_.empty())
+    {
+      double delta_mm = 0.002;
+      double start_mm = 0.;
+      while(start_mm < ground_points_[0].x())
+      {
+        start_mm += delta_mm;
+      }
+
+      // Could work with indexes
+      ground_points_grouped_.clear();
+      if(ground_points_grouped_.empty())
+      {
+        ground_points_grouped_.push_back(std::vector<Eigen::Vector3d>{});
+      }
+
+      size_t current_mm_idx = 0;
+      double current_mm = start_mm;
+      for(size_t i = 0; i < ground_points_.size(); ++ i)
+      {
+        if(ground_points_[i].x() > current_mm + 0.5 * delta_mm)
+        {
+          current_mm += delta_mm;
+          ++ current_mm_idx;
+          // std::cout << current_mm_idx << " " << ground_points_grouped_.size() << std::endl;
+          if(current_mm_idx == ground_points_grouped_.size())
+          {
+            ground_points_grouped_.push_back(std::vector<Eigen::Vector3d>{});
+          }
+        }
+        ground_points_grouped_[current_mm_idx].push_back(ground_points_[i]);
+      }
+
+      ground_points_.clear();
+
+      std::uniform_real_distribution<double> unif(0., 1.);
+      std::default_random_engine re;
+      for(const auto & group: ground_points_grouped_)
+      {
+        if(group.size() > 10)
+        {
+          auto const Q1 = group.size() / 4;
+          auto const Q2 = group.size() / 2;
+          Eigen::Vector3d sum = Eigen::Vector3d::Zero();
+          for(size_t i = Q1; i < Q2; ++ i)
+          {
+            sum += group[i];
+          }
+          const double x = sum.x() / static_cast<double>(Q2 - Q1);
+          const double y = sum.y() / static_cast<double>(Q2 - Q1);
+          const double z = sum.z() / static_cast<double>(Q2 - Q1);
+          ground_points_.push_back(Eigen::Vector3d(x, y, z));
+        }
+        else
+        {
+          ground_points_.insert(ground_points_.end(), group.begin(), group.end());
+        }
+      }
+    }
+
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    mc_rtc::log::info("Took {} ms for [Filtering]", static_cast<double>(duration.count()) / 1000.);
+  }
+
+  auto stop = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+  mc_rtc::log::info("Took {} ms for [E V E R Y T H I N G]", static_cast<double>(duration.count()) / 1000.);
 
   {
     ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);

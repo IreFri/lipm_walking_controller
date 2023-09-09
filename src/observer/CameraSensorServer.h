@@ -42,10 +42,10 @@ private:
   std::mutex points_mtx_;
   std::vector<Eigen::Vector3d> points_;
   std::vector<Eigen::Vector3d> new_camera_points_;
-  std::vector<Eigen::Vector3d> pre_new_camera_points_;
   std::vector<Eigen::Vector3d> pre_new_ground_points_;
   std::vector<Eigen::Vector3d> new_ground_points_;
   std::vector<Eigen::Vector3d> ground_points_;
+  std::vector<std::vector<Eigen::Vector3d>> ground_points_grouped_;
 
   double previous_pitch_ = 0.;
   double previous_t_z_ = 0.;
