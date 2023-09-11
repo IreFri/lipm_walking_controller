@@ -164,7 +164,8 @@ void CameraSensorServer::acquisition()
         }
       }
     }
-    return sum_depth / counter;
+    return pixel_depth;
+    // return sum_depth / counter;
   };
 
   auto angleBetweenVecs = [](const Eigen::Vector3d& v0, const Eigen::Vector3d& v1)
