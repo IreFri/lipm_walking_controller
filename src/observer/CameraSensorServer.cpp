@@ -654,31 +654,31 @@ void CameraSensorServer::do_computation()
     }
   }
 
-  if(!obstacles)
-  {
-    // Re-Alignement to avoid drift after ICP
-    // Re-align ICP Results
-    auto start = std::chrono::high_resolution_clock::now();
+  // if(!obstacles)
+  // {
+  //   // Re-Alignement to avoid drift after ICP
+  //   // Re-align ICP Results
+  //   auto start = std::chrono::high_resolution_clock::now();
 
-    // If no selected points, we skip the estimation
-    if(selected_line.empty())
-    {
-      mc_rtc::log::info("Skip the estimation as there are no selected line for the alignement");
-      data_->result_ready->notify_all();
-      return;
-    }
+  //   // If no selected points, we skip the estimation
+  //   if(selected_line.empty())
+  //   {
+  //     mc_rtc::log::info("Skip the estimation as there are no selected line for the alignement");
+  //     data_->result_ready->notify_all();
+  //     return;
+  //   }
 
-    double pitch = 0.;
-    double t_z = 0.;
+  //   double pitch = 0.;
+  //   double t_z = 0.;
 
-    computePitchAndTzWithCeres(selected_line, pitch, t_z);
+  //   computePitchAndTzWithCeres(selected_line, pitch, t_z);
 
-    new_ground_points_ = reAlignGround(new_ground_points_, pitch, t_z);
+  //   new_ground_points_ = reAlignGround(new_ground_points_, pitch, t_z);
 
-    auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-    mc_rtc::log::info("Took {} ms for [Realignement of ground after ICP]", static_cast<double>(duration.count()) / 1000.);
-  }
+  //   auto stop = std::chrono::high_resolution_clock::now();
+  //   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+  //   mc_rtc::log::info("Took {} ms for [Realignement of ground after ICP]", static_cast<double>(duration.count()) / 1000.);
+  // }
 
   ground_points_.insert(ground_points_.end(), new_ground_points_.begin(), new_ground_points_.end());
 
