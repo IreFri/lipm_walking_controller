@@ -218,29 +218,31 @@ void CameraSensorServer::acquisition()
     std::array<float, 2> pixel;
     const size_t half_kernel_size = kernel_size_ / 2;
     std::vector<Eigen::Vector3d> points;
-    const int offset = 35;
-    for(size_t i = half_width * 0.5 + half_kernel_size; i < width - half_kernel_size - offset; ++i)
+    for(size_t i = half_kernel_size; i < width - half_kernel_size; ++i)
     {
       pixel[0] = static_cast<float>(i);
-      pixel[1] = static_cast<float>(half_height);
-
-      const float depth = applyKernel(pixel, frame);
-      Eigen::Vector3d point = depthToPoint(intrinsics, pixel, depth);
-      if(point.z() != 0)
+      for(int j = -1; j <= 1; ++j)
       {
-        point.y() = 0.;
-        points.push_back(point);
-      }
-    }
+        pixel[1] = static_cast<float>(half_height + j);
 
-    mc_rtc::log::info("{} / {} points -> {} zeros", points.size(), (width - half_kernel_size - offset) - (half_width + half_kernel_size - offset),
-      (width - half_kernel_size - offset) - (half_width + half_kernel_size - offset) - points.size());
+        const float depth = frame.get_distance(static_cast<int>(pixel[0]), static_cast<int>(pixel[1]));
+        Eigen::Vector3d point = depthToPoint(intrinsics, pixel, depth);
+        if(point.z() != 0)
+        {
+          // point.y() = 0.;
+          points.push_back(point);
+        }
+      }
+    }  
+
+    // mc_rtc::log::info("{} / {} points -> {} zeros", points.size(), (width - half_kernel_size - offset) - (half_width + half_kernel_size - offset),
+      // (width - half_kernel_size - offset) - (half_width + half_kernel_size - offset) - points.size());
 
     const size_t threshold_nr_zero_to_discard = 45;
-    if((width - half_kernel_size - offset) - (half_width + half_kernel_size - offset) - points.size() > threshold_nr_zero_to_discard)
-    {
-      points.clear();
-    }
+    // if((width - half_kernel_size - offset) - (half_width + half_kernel_size - offset) - points.size() > threshold_nr_zero_to_discard)
+    // {
+    //   points.clear();
+    // }
 
     // Sort
     std::sort(points.begin(), points.end(),
