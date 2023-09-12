@@ -682,12 +682,18 @@ void CameraSensorServer::do_computation()
 
   ground_points_.insert(ground_points_.end(), new_ground_points_.begin(), new_ground_points_.end());
 
-  std::shared_ptr<open3d::geometry::PointCloud> pc(new open3d::geometry::PointCloud);
-  pc->points_ = ground_points_;
-  pc = pc->VoxelDownSample(0.002);
-  ground_points_ = pc->points_;
+  {
+    std::shared_ptr<open3d::geometry::PointCloud> pc(new open3d::geometry::PointCloud);
+    pc->points_ = ground_points_;
+    pc = pc->VoxelDownSample(0.002);
+    ground_points_ = pc->points_;
+  }
 
   std::sort(ground_points_.begin(), ground_points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+
+  std::shared_ptr<open3d::geometry::PointCloud> pc(new open3d::geometry::PointCloud);
+  pc->points_ = ground_points_;
+  pc = pc->VoxelDownSample(0.005);
 
   auto stop = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
@@ -695,7 +701,7 @@ void CameraSensorServer::do_computation()
 
   {
     ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
-    const auto & points = ground_points_;
+    const auto & points = pc->points_;
     data_->ground_points.resize(points.size());
     for(size_t i = 0; i < points.size(); ++i)
     {
