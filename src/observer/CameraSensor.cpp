@@ -464,18 +464,18 @@ void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
                 }
               }
               data_->skip = false;
-              // if(ctl.datastore().has("SoftFootState::GetState"))
-              // {
-              //   const std::string state = ctl.datastore().call<std::string>("SoftFootState::GetState");
-              //   if(state != desired_state_)
-              //   {
-              //     data_->skip = true;
-              //   }
-              // }
-              // else
-              // {
-              //   data_->skip = true;
-              // }
+              if(ctl.datastore().has("SoftFootState::GetState"))
+              {
+                const std::string state = ctl.datastore().call<std::string>("SoftFootState::GetState");
+                if(!(state == desired_state_ || state == "DoubleSupport"))
+                {
+                  data_->skip = true;
+                }
+              }
+              else
+              {
+                data_->skip = true;
+              }
             }
             if(data_->skip)
             {

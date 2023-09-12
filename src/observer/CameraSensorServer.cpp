@@ -694,6 +694,7 @@ void CameraSensorServer::do_computation()
   std::shared_ptr<open3d::geometry::PointCloud> pc(new open3d::geometry::PointCloud);
   pc->points_ = ground_points_;
   pc = pc->VoxelDownSample(0.005);
+  std::sort(pc->points_.begin(), pc->points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
 
   auto stop = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
