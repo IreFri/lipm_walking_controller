@@ -270,15 +270,13 @@ void CameraSensorServer::do_computation()
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   //// fromCameraToWorldFrameWithAlignement
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  auto fromCameraToWorldFrameWithAlignement = [this](const std::vector<Eigen::Vector3d> & camera_points, double pitch, double t_z)
+  auto fromCameraToWorldFrameWithAlignement = [this](const std::vector<Eigen::Vector3d> & camera_points)
   {
     std::vector<Eigen::Vector3d> ground_points;
-    const sva::PTransformd X_b_b(sva::RotY(pitch).cast<double>(), Eigen::Vector3d(0., 0., t_z));
-
     for(int i = camera_points.size() - 1; i >= 0; --i)
     {
       const sva::PTransformd X_s_p(camera_points[i]);
-      const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * X_b_b * data_->X_0_b;
+      const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * data_->X_0_b;
       if(X_0_p.translation().x() - data_->X_0_b.translation().x() < 0.55)
       {
         ground_points.push_back(X_0_p.translation());
@@ -304,32 +302,23 @@ void CameraSensorServer::do_computation()
       return selected_line;
     }
 
-    pc->OrientNormalsTowardsCameraLocation(data_->X_0_b.translation());
-
-    std::vector<std::vector<Eigen::Vector3d>> lines;
-    lines.push_back(std::vector<Eigen::Vector3d>{});
-
-    const auto n_z = Eigen::Vector3d::UnitZ();
-
-    for(size_t i = 0; i < pc->points_.size(); ++i)
+    try
     {
-      const auto & n_0 = pc->normals_[i];
-
-      const double angle = std::acos(n_0.dot(n_z) / (n_0.norm() * n_z.norm()));
-      if((std::abs(angle * 180. / M_PI) > 15.0)
-        || ((!lines.back().empty() && (lines.back().back().x() - pc->points_[i].x()) > 0.02))
-        || ((!lines.back().empty() && std::abs(lines.back().back().z() - pc->points_[i].z()) > 0.005)))
-      {
-        lines.push_back(std::vector<Eigen::Vector3d>{});
-      }
-      lines.back().push_back(pc->points_[i]);
+      pc->OrientNormalsTowardsCameraLocation(data_->X_0_b.translation());
+    }
+    catch(const std::exception &)
+    {
+      return selected_line;
     }
 
-    for(const auto & line: lines)
+    const auto n_z = Eigen::Vector3d::UnitZ();
+    for(size_t i = 1; i < pc->points_.size(); ++i)
     {
-      if(line.size() > 30)
+      const auto & n_0 = pc->normals_[i];
+      const double angle = std::acos(n_0.dot(n_z) / (n_0.norm() * n_z.norm()));
+      if((std::abs(angle * 180. / M_PI) < 5.0))
       {
-        selected_line.insert(selected_line.end(), line.begin(), line.end());
+        selected_line.push_back(pc->points_[i]);
       }
     }
 
@@ -378,8 +367,6 @@ void CameraSensorServer::do_computation()
       }
     }
 
-    std::sort(_ground_points.begin(), _ground_points.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
-
     return _ground_points;
   };
 
@@ -390,45 +377,67 @@ void CameraSensorServer::do_computation()
   {
     auto ground_points = _ground_points;
 
-    std::sort(ground_points.begin(), ground_points.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
-
     std::vector<std::vector<Eigen::Vector3d>> groups;
     groups.push_back(std::vector<Eigen::Vector3d>{});
-
-    double threshold = 0.002;
     for(size_t i = 1; i < ground_points.size(); ++i)
     {
       const Eigen::Vector3d & T_0_p_0 = ground_points[i - 1];
       const Eigen::Vector3d & T_0_p_1 = ground_points[i];
-
       const double d_x = std::abs(T_0_p_1.x() - T_0_p_0.x());
-      const double d_z = std::abs(T_0_p_1.z() - T_0_p_0.z());
-
-      if(d_x > threshold || d_z > threshold)
+      if(d_x > 0.03)
       {
-        if(groups.back().size() > 10)
-        {
-          threshold += 0.001;
-        }
-
-        if(groups.back().size() < 50)
-        {
-          groups.back().clear();
-        }
-        else
-        {
-          groups.push_back(std::vector<Eigen::Vector3d>{});
-        }
+        groups.push_back(std::vector<Eigen::Vector3d>{});
       }
       groups.back().push_back(T_0_p_1);
     }
 
-    std::vector<Eigen::Vector3d> new_ground_points;
-    for(auto & group: groups)
+    std::vector<std::vector<Eigen::Vector3d>> groups_z;
+    groups_z.push_back(std::vector<Eigen::Vector3d>{});
+    for(size_t j = 0; j < groups.size(); ++j)
     {
-      if(group.size() >= 50)
+      auto & group = groups[j];
+      size_t start_i = 0;
+      while(start_i < group.size() && std::abs(group[start_i].x() - group.front().x()) < 0.01)
       {
-        group.resize(group.size() - 10);
+        ++start_i;
+      }
+
+      size_t end_i = group.size() - 1;
+      while(end_i > 0 && std::abs(group[end_i].x() - group.back().x()) < 0.01)
+      {
+        ++end_i;
+      }
+
+      for(size_t i = start_i; i < end_i; ++i)
+      {
+        const Eigen::Vector3d & T_0_p_0 = group[i - 1];
+        const Eigen::Vector3d & T_0_p_1 = group[i];
+
+        const double d_z = std::abs(T_0_p_1.z() - T_0_p_0.z());
+        const double d_x = std::abs(T_0_p_1.x() - T_0_p_0.x());
+
+        if(d_z > 0.005 * (j + 1) || d_x > 0.0075 * (j + 1))
+        {
+          if(groups_z.back().size() < 40)
+          {
+            groups_z.back().clear();
+          }
+          else
+          {
+            groups_z.push_back(std::vector<Eigen::Vector3d>{});
+          }
+        }
+        groups_z.back().push_back(T_0_p_1);
+      }
+    }
+
+    std::vector<Eigen::Vector3d> new_ground_points;
+    for(auto & group: groups_z)
+    {
+      if(group.size() > 50)
+      {
+        group.erase(group.end() - 10, group.end());
+        group.erase(group.begin(), group.begin() + 10);
         new_ground_points.insert(new_ground_points.end(), group.begin(), group.end());
       }
     }
@@ -460,15 +469,25 @@ void CameraSensorServer::do_computation()
     return;
   }
 
-  auto start = std::chrono::high_resolution_clock::now();
+  auto start_computation = std::chrono::high_resolution_clock::now();
   {
     auto start = std::chrono::high_resolution_clock::now();
 
-    pre_new_ground_points_ = fromCameraToWorldFrameWithAlignement(new_camera_points_, previous_pitch_, previous_t_z_);
+    pre_new_ground_points_ = fromCameraToWorldFrameWithAlignement(new_camera_points_);
 
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
     mc_rtc::log::info("Took {} ms for [Align using previous pitch and t_z]", static_cast<double>(duration.count()) / 1000.);
+  }
+  {
+    auto stop_computation = std::chrono::high_resolution_clock::now();
+    auto duration_computation = std::chrono::duration_cast<std::chrono::microseconds>(stop_computation - start_computation);
+    if(duration_computation.count() / 1000. > 33.0)
+    {
+      mc_rtc::log::error("Timeout");
+      data_->result_ready->notify_all();
+      return;
+    }
   }
 
   std::vector<Eigen::Vector3d> selected_line;
@@ -491,6 +510,16 @@ void CameraSensorServer::do_computation()
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
     mc_rtc::log::info("Took {} ms for [Select line for Ceres]", static_cast<double>(duration.count()) / 1000.);
   }
+  {
+    auto stop_computation = std::chrono::high_resolution_clock::now();
+    auto duration_computation = std::chrono::duration_cast<std::chrono::microseconds>(stop_computation - start_computation);
+    if(duration_computation.count() / 1000. > 33.0)
+    {
+      mc_rtc::log::error("Timeout");
+      data_->result_ready->notify_all();
+      return;
+    }
+  }
 
     // If no selected points, we skip the estimation
   if(selected_line.empty())
@@ -508,6 +537,16 @@ void CameraSensorServer::do_computation()
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
     mc_rtc::log::info("Took {} ms for [Compute pitch and t_z]", static_cast<double>(duration.count()) / 1000.);
+  }
+  {
+    auto stop_computation = std::chrono::high_resolution_clock::now();
+    auto duration_computation = std::chrono::duration_cast<std::chrono::microseconds>(stop_computation - start_computation);
+    if(duration_computation.count() / 1000. > 33.0)
+    {
+      mc_rtc::log::error("Timeout");
+      data_->result_ready->notify_all();
+      return;
+    }
   }
 
   {
@@ -529,6 +568,16 @@ void CameraSensorServer::do_computation()
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
     mc_rtc::log::info("Took {} ms for [Realignement of ground]", static_cast<double>(duration.count()) / 1000.);
   }
+  {
+    auto stop_computation = std::chrono::high_resolution_clock::now();
+    auto duration_computation = std::chrono::duration_cast<std::chrono::microseconds>(stop_computation - start_computation);
+    if(duration_computation.count() / 1000. > 33.0)
+    {
+      mc_rtc::log::error("Timeout");
+      data_->result_ready->notify_all();
+      return;
+    }
+  }
 
   {
     auto start = std::chrono::high_resolution_clock::now();
@@ -538,6 +587,16 @@ void CameraSensorServer::do_computation()
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
     mc_rtc::log::info("Took {} ms for [Filtering]", static_cast<double>(duration.count()) / 1000.);
+  }
+  {
+    auto stop_computation = std::chrono::high_resolution_clock::now();
+    auto duration_computation = std::chrono::duration_cast<std::chrono::microseconds>(stop_computation - start_computation);
+    if(duration_computation.count() / 1000. > 33.0)
+    {
+      mc_rtc::log::error("Timeout");
+      data_->result_ready->notify_all();
+      return;
+    }
   }
 
   {
@@ -553,6 +612,7 @@ void CameraSensorServer::do_computation()
     if(!new_ground_points_.empty() && target->points_.size() > 10)
     {
       std::shared_ptr<open3d::geometry::PointCloud> source(new open3d::geometry::PointCloud);
+      std::sort(new_ground_points_.begin(), new_ground_points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
       source->points_ = new_ground_points_;
 
       const double bary_source = std::accumulate(source->points_.begin(), source->points_.end(), 0., [](const double s, const Eigen::Vector3d & v) { return s + v.y(); }) / source->points_.size();
@@ -610,20 +670,6 @@ void CameraSensorServer::do_computation()
           point.y()  += (bary_target - bary_source);
         }
         std::sort(new_ground_points_.begin(), new_ground_points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
-
-        size_t idx_start = 0;
-        while(idx_start < ground_points_.size() && new_ground_points_.front().x() > ground_points_[idx_start].x())
-        {
-          ++ idx_start;
-        }
-
-        size_t idx_end = idx_start;
-        while(idx_end < ground_points_.size() && new_ground_points_.back().x() > ground_points_[idx_end].x())
-        {
-          ++ idx_end;
-        }
-
-        ground_points_.erase(ground_points_.begin() + idx_start, ground_points_.begin() + idx_end);
       }
     }
 
@@ -643,42 +689,14 @@ void CameraSensorServer::do_computation()
     data_->result_ready->notify_all();
   }
 
-  // Check if obstacles
-  bool obstacles = false;
-  for(const auto & point: new_ground_points_)
   {
-    if(point.z() > 0.01)
-    {
-      obstacles = true;
-      break;
-    }
+    double pitch = 0.;
+    double t_z = 0.;
+
+    computePitchAndTzWithCeres(selected_line, pitch, t_z);
+
+    new_ground_points_ = reAlignGround(new_ground_points_, pitch, t_z);
   }
-
-  // if(!obstacles)
-  // {
-  //   // Re-Alignement to avoid drift after ICP
-  //   // Re-align ICP Results
-  //   auto start = std::chrono::high_resolution_clock::now();
-
-  //   // If no selected points, we skip the estimation
-  //   if(selected_line.empty())
-  //   {
-  //     mc_rtc::log::info("Skip the estimation as there are no selected line for the alignement");
-  //     data_->result_ready->notify_all();
-  //     return;
-  //   }
-
-  //   double pitch = 0.;
-  //   double t_z = 0.;
-
-  //   computePitchAndTzWithCeres(selected_line, pitch, t_z);
-
-  //   new_ground_points_ = reAlignGround(new_ground_points_, pitch, t_z);
-
-  //   auto stop = std::chrono::high_resolution_clock::now();
-  //   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-  //   mc_rtc::log::info("Took {} ms for [Realignement of ground after ICP]", static_cast<double>(duration.count()) / 1000.);
-  // }
 
   ground_points_.insert(ground_points_.end(), new_ground_points_.begin(), new_ground_points_.end());
 
@@ -689,15 +707,43 @@ void CameraSensorServer::do_computation()
     ground_points_ = pc->points_;
   }
 
-  std::sort(ground_points_.begin(), ground_points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+  if(historic_points_.empty())
+  {
+    historic_points_ = new_ground_points_;
+  }
+
+  live_ground_points_.push_back(new_ground_points_);
+  if(live_ground_points_.size() == 3)
+  {
+    live_ground_points_.pop_front();
+  }
+
+  if(live_ground_points_.front().front().x() < new_ground_points_.front().x())
+  {
+    size_t idx_start = 0;
+    while(idx_start < historic_points_.size() && new_ground_points_.front().x() > historic_points_[idx_start].x())
+    {
+      ++ idx_start;
+    }
+    historic_points_.erase(historic_points_.begin() + idx_start, historic_points_.end());
+    historic_points_.insert(historic_points_.end(), new_ground_points_.begin(), new_ground_points_.end());
+    std::sort(historic_points_.begin(), historic_points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+    live_ground_points_.clear();
+  }
+
+  ground_points_ = historic_points_;
+  for(const auto & points: live_ground_points_)
+  {
+    ground_points_.insert(ground_points_.end(), points.begin(), points.end());
+  }
 
   std::shared_ptr<open3d::geometry::PointCloud> pc(new open3d::geometry::PointCloud);
   pc->points_ = ground_points_;
   pc = pc->VoxelDownSample(0.005);
   std::sort(pc->points_.begin(), pc->points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
 
-  auto stop = std::chrono::high_resolution_clock::now();
-  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+  auto stop_computation = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop_computation - start_computation);
   mc_rtc::log::info("Took {} ms for [E V E R Y T H I N G]", static_cast<double>(duration.count()) / 1000.);
 
   {
