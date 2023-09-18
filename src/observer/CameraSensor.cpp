@@ -322,37 +322,37 @@ void CameraSensor::addToGUI(const mc_control::MCController & ctl,
 
   std::vector<std::string> points_category = category;
   points_category.push_back("points");
-  gui.addElement(
-      points_category,
-      mc_rtc::gui::Trajectory("Points",
-                              [this, &ctl]()
-                              {
-                                std::vector<Eigen::Vector3d> points;
-                                {
-                                  points = points_;
-                                }
+  // gui.addElement(
+  //     points_category,
+  //     mc_rtc::gui::Trajectory("Points",
+  //                             [this, &ctl]()
+  //                             {
+  //                               std::vector<Eigen::Vector3d> points;
+  //                               {
+  //                                 points = points_;
+  //                               }
 
-                                if(points.empty())
-                                {
-                                  return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
-                                }
+  //                               if(points.empty())
+  //                               {
+  //                                 return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
+  //                               }
 
-                                const std::string & body_of_sensor =
-                                    ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).parent();
-                                // Access the position of body name in world coordinates (phalanx position)
-                                sva::PTransformd X_0_ph = ctl.realRobot().bodyPosW(body_of_sensor);
-                                // Returns the transformation from the parent body to the sensor
-                                const sva::PTransformd & X_ph_s =
-                                    ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s();
-                                // Keep the estimated 3d point for the ground
-                                std::vector<Eigen::Vector3d> traj;
-                                for(const auto & point : points)
-                                {
-                                  const sva::PTransformd X_0_m = sva::PTransformd(point) * X_ph_s * X_0_ph;
-                                  traj.push_back(X_0_m.translation());
-                                }
-                                return traj;
-                              }));
+  //                               const std::string & body_of_sensor =
+  //                                   ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).parent();
+  //                               // Access the position of body name in world coordinates (phalanx position)
+  //                               sva::PTransformd X_0_ph = ctl.realRobot().bodyPosW(body_of_sensor);
+  //                               // Returns the transformation from the parent body to the sensor
+  //                               const sva::PTransformd & X_ph_s =
+  //                                   ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s();
+  //                               // Keep the estimated 3d point for the ground
+  //                               std::vector<Eigen::Vector3d> traj;
+  //                               for(const auto & point : points)
+  //                               {
+  //                                 const sva::PTransformd X_0_m = sva::PTransformd(point) * X_ph_s * X_0_ph;
+  //                                 traj.push_back(X_0_m.translation());
+  //                               }
+  //                               return traj;
+  //                             }));
 
   gui.addElement(
       points_category,
