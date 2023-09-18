@@ -701,7 +701,7 @@ void CameraSensorServer::do_computation()
 
     grounds.clear();
     obstacles.clear();
-    splitGroundAndObstacles(pre_new_ground_points_, 5.0, grounds, obstacles);
+    splitGroundAndObstacles(new_ground_points_, 5.0, grounds, obstacles);
 
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
@@ -749,7 +749,7 @@ void CameraSensorServer::do_computation()
   {
     auto start = std::chrono::high_resolution_clock::now();
 
-    new_ground_points_ = reAlignGround(pre_new_ground_points_, previous_pitch_, previous_t_z_, -0.001);
+    new_ground_points_ = reAlignGround(new_ground_points_, previous_pitch_, previous_t_z_, -0.001);
 
     {
       ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
@@ -911,7 +911,7 @@ void CameraSensorServer::do_computation()
     for(size_t i = 0; i < points.size(); ++i)
     {
       const auto & p = points[i];
-      data_->ground_points[i] = Eigen::Vector3d(p.x(), X_0_b_.translation().y(), p.z());
+      data_->ground_points[i] = Eigen::Vector3d(p.x(), data_->X_0_b.translation().y(), p.z());
     }
   }
   data_->result_ready->notify_all();
