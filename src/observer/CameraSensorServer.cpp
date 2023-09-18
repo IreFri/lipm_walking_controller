@@ -906,7 +906,7 @@ void CameraSensorServer::do_computation()
 
   {
     ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
-    const auto & points = pc->points_;
+    const auto & points = ground_points_;
     data_->ground_points.resize(points.size());
     for(size_t i = 0; i < points.size(); ++i)
     {
