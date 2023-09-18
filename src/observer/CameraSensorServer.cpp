@@ -276,53 +276,120 @@ void CameraSensorServer::do_computation()
     for(int i = camera_points.size() - 1; i >= 0; --i)
     {
       const sva::PTransformd X_s_p(camera_points[i]);
-      const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * data_->X_0_b;
-      if(X_0_p.translation().x() - data_->X_0_b.translation().x() < 0.55)
-      {
-        ground_points.push_back(X_0_p.translation());
-      }
+      sva::PTransformd X_0_p = X_s_p * data_->X_b_s * X_0_b_;
+      X_0_p.translation().y() = 0.;
+      ground_points.push_back(X_0_p.translation());
     }
+
+    std::shared_ptr<open3d::geometry::PointCloud> pc(new open3d::geometry::PointCloud);
+    pc->points_ = ground_points;
+    pc = pc->VoxelDownSample(0.0025);
+    ground_points = pc->points_;
+    std::sort(ground_points.begin(), ground_points.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
 
     return ground_points;
   };
 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  //// selectLineForCeresAlignement
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  auto selectLineForCeresAlignement = [this](const std::vector<Eigen::Vector3d> & ground_points)
+  //// thresholdBasedOnDistance
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  auto thresholdBasedOnDistance = [&](double start_x, double X_0_p_x)
+  {
+    const double min_x = start_x;
+    const double max_x = start_x + 0.65;
+    const double min_threshold = 0.002;
+    const double max_threshold = 0.030;
+
+    return min_threshold + (X_0_p_x  - min_x) * (max_threshold - min_threshold) / (max_x - min_x);
+  };
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //// splitGroundAndObstacles
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  auto splitGroundAndObstacles = [this](const std::vector<Eigen::Vector3d> & ground_points, double threshold_deg,
+    std::vector<Eigen::Vector3d> & grounds, std::vector<Eigen::Vector3d> & obstacles) -> void
   {
     std::shared_ptr<open3d::geometry::PointCloud> pc(new open3d::geometry::PointCloud);
     pc->points_ = ground_points;
-    std::sort(pc->points_.begin(), pc->points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+    for(const auto & p: ground_points)
+    {
+      pc->points_.push_back(Eigen::Vector3d(p.x(), 0.002, p.z()));
+      pc->points_.push_back(Eigen::Vector3d(p.x(), 0.002, p.z()));
+    }
+
     pc->EstimateNormals();
 
-    std::vector<Eigen::Vector3d> selected_line;
     if(pc->normals_.empty())
     {
-      return selected_line;
+      return;
     }
 
     try
     {
-      pc->OrientNormalsTowardsCameraLocation(data_->X_0_b.translation());
+      pc->OrientNormalsTowardsCameraLocation(X_0_b_.translation());
     }
     catch(const std::exception &)
     {
-      return selected_line;
+      return;
     }
 
+    bool is_obstacle = false;
     const auto n_z = Eigen::Vector3d::UnitZ();
-    for(size_t i = 1; i < pc->points_.size(); ++i)
+    for(size_t i = 1; i < ground_points.size(); ++i)
     {
       const auto & n_0 = pc->normals_[i];
       const double angle = std::acos(n_0.dot(n_z) / (n_0.norm() * n_z.norm()));
-      if((std::abs(angle * 180. / M_PI) < 5.0))
+
+      if(is_obstacle && std::abs(pc->points_[i].x() - pc->points_[i - 1].x()) > 0.01)
       {
-        selected_line.push_back(pc->points_[i]);
+        is_obstacle = false;
+      }
+
+      if(is_obstacle || std::abs(angle * 180. / M_PI) > threshold_deg)
+      {
+        is_obstacle = true;
+        obstacles.push_back(pc->points_[i]);
+      }
+      else
+      {
+        grounds.push_back(pc->points_[i]);
+      }
+    }
+  };
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //// selectObstacles
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  auto selectObstacles = [&](std::vector<Eigen::Vector3d> & ground_points, bool with_erase = false)
+  {
+    std::vector<size_t> idxs_to_erase;
+
+    std::vector<Eigen::Vector3d> res;
+    for(int i = 0; i < ground_points.size() - 1; ++ i)
+    {
+      const auto & p = ground_points[i];
+      if(p.z() > 0.002)
+      {
+        res.push_back(p);
+        if(std::abs(ground_points[i + 1].x() - p.x()) > 0.02)
+        {
+          idxs_to_erase.push_back(i);
+          idxs_to_erase.push_back(i - 1);
+          idxs_to_erase.push_back(i - 2);
+          idxs_to_erase.push_back(i - 3);
+        }
       }
     }
 
-    return selected_line;
+    if(with_erase)
+    {
+      for(const auto & index: idxs_to_erase)
+      {
+        ground_points.erase(ground_points.begin() + index);
+      }
+    }
+
+    return res;
   };
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -337,8 +404,8 @@ void CameraSensorServer::do_computation()
     for(const auto& T_0_p: selected_line)
     {
       const sva::PTransformd X_0_p(T_0_p);
-      const sva::PTransformd X_s_p = X_0_p * (data_->X_b_s * data_->X_0_b).inv();
-      ceres::CostFunction* cost_function = PitchZCostFunctor::Create(X_s_p, data_->X_0_b, data_->X_b_s);
+      const sva::PTransformd X_s_p = X_0_p * (data_->X_b_s * X_0_b_).inv();
+      ceres::CostFunction* cost_function = PitchZCostFunctor::Create(X_s_p, X_0_b_, data_->X_b_s);
       problem.AddResidualBlock(cost_function,  new ceres::CauchyLoss(0.5), &pitch, &t_z);
     }
 
@@ -351,7 +418,7 @@ void CameraSensorServer::do_computation()
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   //// reAlignGround
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  auto reAlignGround = [this](const std::vector<Eigen::Vector3d> & ground_points, double pitch, double t_z)
+  auto reAlignGround = [this](const std::vector<Eigen::Vector3d> & ground_points, double pitch, double t_z, double cutoff_z)
   {
     std::vector<Eigen::Vector3d> _ground_points;
     const sva::PTransformd X_b_b(sva::RotY(pitch).cast<double>(), Eigen::Vector3d(0., 0., t_z));
@@ -359,9 +426,9 @@ void CameraSensorServer::do_computation()
     {
       // From camera frame to world frame
       const sva::PTransformd _X_0_p(T_0_p);
-      const sva::PTransformd X_s_p = _X_0_p * (data_->X_b_s * data_->X_0_b).inv();
-      const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * X_b_b * data_->X_0_b;
-      if(X_0_p.translation().z() > -0.005)
+      const sva::PTransformd X_s_p = _X_0_p * (data_->X_b_s * X_0_b_).inv();
+      const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * X_b_b * X_0_b_;
+      if(X_0_p.translation().z() > cutoff_z)
       {
         _ground_points.push_back(X_0_p.translation());
       }
@@ -371,78 +438,95 @@ void CameraSensorServer::do_computation()
   };
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  //// filtering
+  //// denoise
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  auto filtering = [](const std::vector<Eigen::Vector3d> & _ground_points)
+  auto denoise = [this, &thresholdBasedOnDistance](std::vector<Eigen::Vector3d> points)
   {
-    auto ground_points = _ground_points;
+    std::shared_ptr<open3d::geometry::PointCloud> pc(new open3d::geometry::PointCloud);
+    pc->points_ = points;
 
-    std::vector<std::vector<Eigen::Vector3d>> groups;
-    groups.push_back(std::vector<Eigen::Vector3d>{});
-    for(size_t i = 1; i < ground_points.size(); ++i)
+    open3d::geometry::KDTreeFlann tree(*pc);
+
+    // double threshold = 0.0055;
+    // double add_threshold = 0.0005;
+    const double add_threshold_searching = 0.0005;
+
+    std::vector<int> indices_done;
+
+    std::vector<std::vector<Eigen::Vector3d>> segmentation;
+    segmentation.push_back(std::vector<Eigen::Vector3d>{});
+
+    for(size_t i = 0; i < points.size(); ++i)
     {
-      const Eigen::Vector3d & T_0_p_0 = ground_points[i - 1];
-      const Eigen::Vector3d & T_0_p_1 = ground_points[i];
-      const double d_x = std::abs(T_0_p_1.x() - T_0_p_0.x());
-      if(d_x > 0.03)
+      if(std::find(indices_done.begin(), indices_done.end(), i) != indices_done.end())
       {
-        groups.push_back(std::vector<Eigen::Vector3d>{});
-      }
-      groups.back().push_back(T_0_p_1);
-    }
-
-    std::vector<std::vector<Eigen::Vector3d>> groups_z;
-    groups_z.push_back(std::vector<Eigen::Vector3d>{});
-    for(size_t j = 0; j < groups.size(); ++j)
-    {
-      auto & group = groups[j];
-      size_t start_i = 0;
-      while(start_i < group.size() && std::abs(group[start_i].x() - group.front().x()) < 0.01)
-      {
-        ++start_i;
+        continue;
       }
 
-      size_t end_i = group.size() - 1;
-      while(end_i > 0 && std::abs(group[end_i].x() - group.back().x()) < 0.01)
+      std::vector<int> current_indices;
+
+      Eigen::Vector3d point = points[i];
+      size_t nr_failed = 0;
+      size_t max_failure = 3;
+      while(true)
       {
-        ++end_i;
-      }
+        double current_threshold = thresholdBasedOnDistance(points.front().x(), point.x());
 
-      for(size_t i = start_i; i < end_i; ++i)
-      {
-        const Eigen::Vector3d & T_0_p_0 = group[i - 1];
-        const Eigen::Vector3d & T_0_p_1 = group[i];
+        std::vector<int> indices;
+        std::vector<double> distances;
+        tree.SearchRadius<Eigen::Vector3d>(point, current_threshold, indices, distances);
 
-        const double d_z = std::abs(T_0_p_1.z() - T_0_p_0.z());
-        const double d_x = std::abs(T_0_p_1.x() - T_0_p_0.x());
-
-        if(d_z > 0.005 * (j + 1) || d_x > 0.0075 * (j + 1))
+        if(indices.size() == 1 && nr_failed < max_failure)
         {
-          if(groups_z.back().size() < 40)
-          {
-            groups_z.back().clear();
-          }
-          else
-          {
-            groups_z.push_back(std::vector<Eigen::Vector3d>{});
-          }
+          current_threshold += add_threshold_searching;
+          ++ nr_failed;
         }
-        groups_z.back().push_back(T_0_p_1);
-      }
-    }
+        else if(indices.size() == 1)
+        {
+          break;
+        }
 
-    std::vector<Eigen::Vector3d> new_ground_points;
-    for(auto & group: groups_z)
-    {
-      if(group.size() > 50)
+        std::sort(indices.begin(), indices.end());
+        bool are_new = false;
+        for(const auto & idx: indices)
+        {
+          const bool is_new = std::find(indices_done.begin(), indices_done.end(), idx) == indices_done.end();
+          if(is_new)
+          {
+            current_indices.push_back(idx);
+            point = points[idx];
+          }
+          are_new = are_new || is_new;
+        }
+
+        if(!are_new)
+        {
+          break;
+        }
+
+        indices_done.insert(indices_done.end(), current_indices.begin(), current_indices.end());
+      }
+
+      for(const auto & idx: current_indices)
       {
-        group.erase(group.end() - 10, group.end());
-        group.erase(group.begin(), group.begin() + 10);
-        new_ground_points.insert(new_ground_points.end(), group.begin(), group.end());
+        segmentation.back().push_back(points[idx]);
+      }
+
+      double threshold = thresholdBasedOnDistance(points.front().x(), point.x());
+      segmentation.push_back(std::vector<Eigen::Vector3d>{});
+
+    }
+
+    std::vector<Eigen::Vector3d> res;
+    for(const auto & group: segmentation)
+    {
+      if(group.size() >= 10)
+      {
+        res.insert(res.end(), group.begin(), group.end());
       }
     }
 
-    return new_ground_points;
+    return res;
   };
 
 
@@ -473,11 +557,25 @@ void CameraSensorServer::do_computation()
   {
     auto start = std::chrono::high_resolution_clock::now();
 
+    X_0_b_ = data_->X_0_b;
+    X_0_b_.translation().y() = 0.;
+
+    const Eigen::Vector3d rpy = mc_rbdyn::rpyFromMat(data_->X_0_b.rotation());
+    X_0_b_.rotation() = mc_rbdyn::rpyToMat(Eigen::Vector3d(rpy(0), 0., 0.));
+
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    mc_rtc::log::info("Took {} ms for [Extract X_0_b]", static_cast<double>(duration.count()) / 1000.);
+  }
+
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+
     pre_new_ground_points_ = fromCameraToWorldFrameWithAlignement(new_camera_points_);
 
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-    mc_rtc::log::info("Took {} ms for [Align using previous pitch and t_z]", static_cast<double>(duration.count()) / 1000.);
+    mc_rtc::log::info("Took {} ms for [From Camera to World frame]", static_cast<double>(duration.count()) / 1000.);
   }
   {
     auto stop_computation = std::chrono::high_resolution_clock::now();
@@ -490,21 +588,40 @@ void CameraSensorServer::do_computation()
     }
   }
 
-  std::vector<Eigen::Vector3d> selected_line;
   {
     auto start = std::chrono::high_resolution_clock::now();
 
-    selected_line = selectLineForCeresAlignement(pre_new_ground_points_);
+    pre_new_ground_points_ = denoise(pre_new_ground_points_);
 
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    mc_rtc::log::info("Took {} ms for [Denoise]", static_cast<double>(duration.count()) / 1000.);
+  }
+  {
+    auto stop_computation = std::chrono::high_resolution_clock::now();
+    auto duration_computation = std::chrono::duration_cast<std::chrono::microseconds>(stop_computation - start_computation);
+    if(duration_computation.count() / 1000. > 33.0)
     {
-      ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
-      data_->selected_points.resize(selected_line.size());
-      for(size_t i = 0; i < selected_line.size(); ++i)
-      {
-        data_->selected_points[i] = selected_line[i];
-      }
+      mc_rtc::log::error("Timeout");
       data_->result_ready->notify_all();
+      return;
     }
+  }
+
+   // If not enough points
+  if(pre_new_ground_points_.size() < 50)
+  {
+    mc_rtc::log::info("Skip the estimation as there are not enough points after denoising");
+    data_->result_ready->notify_all();
+    return;
+  }
+
+  std::vector<Eigen::Vector3d> grounds;
+  std::vector<Eigen::Vector3d> obstacles;
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    splitGroundAndObstacles(pre_new_ground_points_, 15.0, grounds, obstacles);
 
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
@@ -521,10 +638,10 @@ void CameraSensorServer::do_computation()
     }
   }
 
-    // If no selected points, we skip the estimation
-  if(selected_line.empty())
+  // If no selected points, we skip the estimation
+  if(grounds.empty())
   {
-    mc_rtc::log::info("Skip the estimation as there are no selected line for the alignement");
+    mc_rtc::log::info("Skip the estimation as there are no selected grounds for the alignement");
     data_->result_ready->notify_all();
     return;
   }
@@ -532,7 +649,7 @@ void CameraSensorServer::do_computation()
   {
     auto start = std::chrono::high_resolution_clock::now();
 
-    computePitchAndTzWithCeres(selected_line, previous_pitch_, previous_t_z_);
+    computePitchAndTzWithCeres(grounds, previous_pitch_, previous_t_z_);
 
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
@@ -552,7 +669,7 @@ void CameraSensorServer::do_computation()
   {
     auto start = std::chrono::high_resolution_clock::now();
 
-    new_ground_points_ = reAlignGround(pre_new_ground_points_, previous_pitch_, previous_t_z_);
+    new_ground_points_ = reAlignGround(pre_new_ground_points_, previous_pitch_, previous_t_z_, -0.001);
 
     {
       ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
@@ -582,11 +699,71 @@ void CameraSensorServer::do_computation()
   {
     auto start = std::chrono::high_resolution_clock::now();
 
-    new_ground_points_ = filtering(new_ground_points_);
+    grounds.clear();
+    obstacles.clear();
+    splitGroundAndObstacles(pre_new_ground_points_, 5.0, grounds, obstacles);
 
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-    mc_rtc::log::info("Took {} ms for [Filtering]", static_cast<double>(duration.count()) / 1000.);
+    mc_rtc::log::info("Took {} ms for [Select line for Ceres]", static_cast<double>(duration.count()) / 1000.);
+  }
+  {
+    auto stop_computation = std::chrono::high_resolution_clock::now();
+    auto duration_computation = std::chrono::duration_cast<std::chrono::microseconds>(stop_computation - start_computation);
+    if(duration_computation.count() / 1000. > 33.0)
+    {
+      mc_rtc::log::error("Timeout");
+      data_->result_ready->notify_all();
+      return;
+    }
+  }
+
+  // If no selected points, we skip the estimation
+  if(grounds.empty())
+  {
+    mc_rtc::log::info("Skip the estimation as there are no selected grounds for the alignement");
+    data_->result_ready->notify_all();
+    return;
+  }
+
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    computePitchAndTzWithCeres(grounds, previous_pitch_, previous_t_z_);
+
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    mc_rtc::log::info("Took {} ms for [Compute pitch and t_z]", static_cast<double>(duration.count()) / 1000.);
+  }
+  {
+    auto stop_computation = std::chrono::high_resolution_clock::now();
+    auto duration_computation = std::chrono::duration_cast<std::chrono::microseconds>(stop_computation - start_computation);
+    if(duration_computation.count() / 1000. > 33.0)
+    {
+      mc_rtc::log::error("Timeout");
+      data_->result_ready->notify_all();
+      return;
+    }
+  }
+
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    new_ground_points_ = reAlignGround(pre_new_ground_points_, previous_pitch_, previous_t_z_, -0.001);
+
+    {
+      ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+      data_->aligned_points.resize(new_ground_points_.size());
+      for(size_t i = 0; i < new_ground_points_.size(); ++i)
+      {
+        data_->aligned_points[i] = new_ground_points_[i];
+      }
+      data_->result_ready->notify_all();
+    }
+
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    mc_rtc::log::info("Took {} ms for [Realignement of ground]", static_cast<double>(duration.count()) / 1000.);
   }
   {
     auto stop_computation = std::chrono::high_resolution_clock::now();
@@ -605,71 +782,74 @@ void CameraSensorServer::do_computation()
     std::shared_ptr<open3d::geometry::PointCloud> target(new open3d::geometry::PointCloud);
     target->points_ = ground_points_;
 
-    const auto front = Eigen::Vector3d(data_->X_0_b.translation().x() + 0.0, data_->X_0_b.translation().y() - 0.10, -0.10);
-    const auto back = Eigen::Vector3d(Eigen::Vector3d(data_->X_0_b.translation().x() + 0.55, data_->X_0_b.translation().x() + 0.10, 0.10));
+    const auto front = Eigen::Vector3d(X_0_b_.translation().x() + 0.0, X_0_b_.translation().y() - 0.10, -0.10);
+    const auto back = Eigen::Vector3d(Eigen::Vector3d(X_0_b_.translation().x() + 0.55, X_0_b_.translation().x() + 0.10, 0.10));
     target = target->Crop(open3d::geometry::AxisAlignedBoundingBox(front, back));
 
-    if(!new_ground_points_.empty() && target->points_.size() > 10)
+    // Only keep 0.15m of data
+    size_t idx_start = 0;
+    while(idx_start < new_ground_points_.size() && (new_ground_points_[idx_start].x() - new_ground_points_.front().x()) < 0.15)
     {
-      std::shared_ptr<open3d::geometry::PointCloud> source(new open3d::geometry::PointCloud);
+      ++ idx_start;
+    }
+    new_ground_points_.erase(new_ground_points_.begin() + idx_start, new_ground_points_.end());
+
+    // If not enough points
+    if(new_ground_points_.size() < 20)
+    {
+      mc_rtc::log::info("Skip the estimation as there are not enough points after shrinking down to 0.15m");
+      new_ground_points_.clear();
+    }
+
+    if(!new_ground_points_.empty() && !obstacles.empty() && target->points_.size() > 10)
+    {
       std::sort(new_ground_points_.begin(), new_ground_points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
-      source->points_ = new_ground_points_;
 
-      const double bary_source = std::accumulate(source->points_.begin(), source->points_.end(), 0., [](const double s, const Eigen::Vector3d & v) { return s + v.y(); }) / source->points_.size();
-      const double bary_target = std::accumulate(target->points_.begin(), target->points_.end(), 0., [](const double s, const Eigen::Vector3d & v) { return s + v.y(); }) / target->points_.size();
+      std::vector<Eigen::Vector3d> target_obstacles = selectObstacles(target->points_);
+      std::vector<Eigen::Vector3d> src_obstacles = selectObstacles(new_ground_points_, true);
 
-      // Re-align
-      for(auto & point: source->points_)
+      double t_x = 0.;
+      ceres::Problem problem;
+
+      if(target_obstacles.size() > src_obstacles.size())
       {
-        point.y() += (bary_target - bary_source);
-      }
-
-      // ICP For matching
-      auto result = open3d::pipelines::registration::RegistrationGeneralizedICP(
-          *source, *target, 0.05, Eigen::Matrix4d::Identity(),
-          open3d::pipelines::registration::TransformationEstimationForGeneralizedICP(),
-          open3d::pipelines::registration::ICPConvergenceCriteria(1e-6, 1e-6, 15));
-
-      // Apply transformation
-      source->Transform(result.transformation_);
-
-      bool success = true;
-      if(std::abs(mc_rbdyn::rpyFromMat(result.transformation_.block<3, 3>(0, 0)).y()) > 0.0872665 ||
-        std::abs(mc_rbdyn::rpyFromMat(result.transformation_.block<3, 3>(0, 0)).z()) > 0.0872665)
-      {
-        mc_rtc::log::error("Discard ICP result as the angle is > 5 [deg]");
-        success = false;
+        for(const auto& T_0_p: src_obstacles)
+        {
+          ceres::CostFunction* cost_function = XCostFunctor::Create(T_0_p, target_obstacles);
+          problem.AddResidualBlock(cost_function,  new ceres::CauchyLoss(0.5), &t_x);
+        }
       }
       else
       {
-        auto distances = source->ComputePointCloudDistance(*target);
-        std::sort(distances.begin(), distances.end());
-        double sum = 0.;
-        for(size_t i = 0; i < distances.size(); ++i)
+        for(const auto& T_0_p: target_obstacles)
         {
-          sum += std::abs(distances[i]);
-        }
-        sum /= distances.size();
-
-        if(sum < 0.005)
-        {
-          new_ground_points_ = source->points_;
-        }
-        else
-        {
-          mc_rtc::log::error("Do not use ICP result because {} > 0.005", sum);
-          success = false;
+          ceres::CostFunction* cost_function = XCostFunctor::Create(T_0_p, src_obstacles);
+          problem.AddResidualBlock(cost_function,  new ceres::CauchyLoss(0.5), &t_x);
         }
       }
 
-      if(!success)
+      ceres::Solver::Options options;
+      options.linear_solver_type = ceres::DENSE_QR;
+      ceres::Solver::Summary summary;
+      ceres::Solve(options, &problem, &summary);
+
+      if(!(target_obstacles.size() > src_obstacles.size()))
       {
-        // Re-align
-        for(auto & point: new_ground_points_)
+        t_x = -t_x;
+      }
+
+      if(std::abs(t_x) > 0.025)
+      {
+        mc_rtc::log::error("Too much error in x: {}", t_x);
+        new_ground_points_.clear();
+      }
+
+      if(!new_ground_points_.empty())
+      {
+        for(auto & p: new_ground_points_)
         {
-          point.y()  += (bary_target - bary_source);
+          p.x() += t_x;
         }
-        std::sort(new_ground_points_.begin(), new_ground_points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
       }
     }
 
@@ -678,44 +858,18 @@ void CameraSensorServer::do_computation()
     mc_rtc::log::info("Took {} ms for [ICP Alignement]", static_cast<double>(duration.count()) / 1000.);
   }
 
-  selected_line = selectLineForCeresAlignement(new_ground_points_);
-  {
-    ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
-    data_->selected_points.resize(selected_line.size());
-    for(size_t i = 0; i < selected_line.size(); ++i)
-    {
-      data_->selected_points[i] = selected_line[i];
-    }
-    data_->result_ready->notify_all();
-  }
-
-  {
-    double pitch = 0.;
-    double t_z = 0.;
-
-    computePitchAndTzWithCeres(selected_line, pitch, t_z);
-
-    new_ground_points_ = reAlignGround(new_ground_points_, pitch, t_z);
-  }
-
-  ground_points_.insert(ground_points_.end(), new_ground_points_.begin(), new_ground_points_.end());
-
-  {
-    std::shared_ptr<open3d::geometry::PointCloud> pc(new open3d::geometry::PointCloud);
-    pc->points_ = ground_points_;
-    pc = pc->VoxelDownSample(0.002);
-    ground_points_ = pc->points_;
-  }
-
   if(historic_points_.empty())
   {
     historic_points_ = new_ground_points_;
   }
 
-  live_ground_points_.push_back(new_ground_points_);
-  if(live_ground_points_.size() == 3)
+  if(!new_ground_points_.empty())
   {
-    live_ground_points_.pop_front();
+    if(live_ground_points_.size() == 3)
+    {
+      live_ground_points_.pop_front();
+    }
+    live_ground_points_.push_back(new_ground_points_);
   }
 
   if(live_ground_points_.front().front().x() < new_ground_points_.front().x())
@@ -726,9 +880,12 @@ void CameraSensorServer::do_computation()
       ++ idx_start;
     }
     historic_points_.erase(historic_points_.begin() + idx_start, historic_points_.end());
+    for(const auto & points: live_ground_points_)
+    {
+      historic_points_.insert(historic_points_.end(), points.begin(), points.end());
+    }
     historic_points_.insert(historic_points_.end(), new_ground_points_.begin(), new_ground_points_.end());
     std::sort(historic_points_.begin(), historic_points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
-    live_ground_points_.clear();
   }
 
   ground_points_ = historic_points_;
@@ -739,8 +896,9 @@ void CameraSensorServer::do_computation()
 
   std::shared_ptr<open3d::geometry::PointCloud> pc(new open3d::geometry::PointCloud);
   pc->points_ = ground_points_;
-  pc = pc->VoxelDownSample(0.005);
-  std::sort(pc->points_.begin(), pc->points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+  pc = pc->VoxelDownSample(0.002);
+  ground_points_ = pc->points_;
+  std::sort(ground_points_.begin(), ground_points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
 
   auto stop_computation = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop_computation - start_computation);
@@ -752,7 +910,8 @@ void CameraSensorServer::do_computation()
     data_->ground_points.resize(points.size());
     for(size_t i = 0; i < points.size(); ++i)
     {
-      data_->ground_points[i] = points[i];
+      const auto & p = points[i];
+      data_->ground_points[i] = Eigen::Vector3d(p.x(), X_0_b_.translation().y(), p.z());
     }
   }
   data_->result_ready->notify_all();

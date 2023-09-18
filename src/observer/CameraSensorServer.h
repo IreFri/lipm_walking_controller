@@ -47,6 +47,7 @@ private:
   std::vector<Eigen::Vector3d> ground_points_;
   std::vector<Eigen::Vector3d> historic_points_;
   std::deque<std::vector<Eigen::Vector3d>> live_ground_points_;
+  sva::PTransformd X_0_b_;
 
   double previous_pitch_ = 0.;
   double previous_t_z_ = 0.;

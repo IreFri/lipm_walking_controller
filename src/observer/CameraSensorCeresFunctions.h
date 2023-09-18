@@ -80,14 +80,51 @@ private:
   const sva::PTransformd X_b_s_;
 };
 
-struct Minimize
+struct XCostFunctor
 {
-  template<typename T>
-  bool operator()(const T * const x, T * residual) const
+  XCostFunctor(const Eigen::Vector3d & p, const std::vector<Eigen::Vector3d> & obstacles)
+  : p_(p),
+    obstacles_(obstacles)
   {
-    residual[0] = x[0];
+  }
+
+  template<typename T>
+  bool operator()(const T * const t_x, T * residual) const
+  {
+    const Eigen::Vector3<T> translation(t_x[0], T(0.), T(0.));
+    const Eigen::Vector3<T> new_p = p_.cast<T>() + translation;
+
+    T min_dist = T(1000.);
+    for(const auto & point: obstacles_)
+    {
+      T dist = (point.cast<T>() - new_p).norm();
+      if(dist < min_dist)
+      {
+        min_dist = dist;
+      }
+    }
+
+    // residual[0] = T(1000.);
+
+    // if(min_dist < T(0.05))
+    {
+      residual[0] = min_dist;
+    }
+
+
     return true;
   }
+
+  // Factory to hide the construction of the CostFunction object from the client code.
+  static ceres::CostFunction * Create(const Eigen::Vector3d & p,
+                                      const std::vector<Eigen::Vector3d> & obstacles)
+  {
+    return (new ceres::AutoDiffCostFunction<XCostFunctor, 1, 1>(new XCostFunctor(p, obstacles)));
+  }
+
+private:
+  const Eigen::Vector3d p_;
+  const std::vector<Eigen::Vector3d> obstacles_;
 };
 
 } // namespace
