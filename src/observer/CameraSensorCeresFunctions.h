@@ -104,13 +104,7 @@ struct XCostFunctor
       }
     }
 
-    // residual[0] = T(1000.);
-
-    // if(min_dist < T(0.05))
-    {
-      residual[0] = min_dist;
-    }
-
+    residual[0] = min_dist;
 
     return true;
   }
