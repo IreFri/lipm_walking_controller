@@ -91,7 +91,7 @@ add_subdirectory(3rd-party/serial EXCLUDE_FROM_ALL)
 add_subdirectory(plugins/ExternalFootstepPlanner)
 add_subdirectory(src)
 add_subdirectory(nano)
-# add_subdirectory(camera)
+add_subdirectory(camera)
 
 set(PACKAGE_EXTRA_MACROS
     "set(LIPM_WALKING_STATES_LIBRARIES \"${MC_CONTROLLER_INSTALL_PREFIX}/lipm_walking_controller_softfoot/states\")
