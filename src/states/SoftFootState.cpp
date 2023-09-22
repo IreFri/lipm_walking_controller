@@ -1290,7 +1290,7 @@ void SoftFootState::computeFootLandingPosition(const Foot & current_moving_foot,
     return ret;
   };
 
-  const std::vector<double> position_offsets_x = {0., -0.03, -0.02, -0.01, 0.01, 0.02, 0.03};
+  const std::vector<double> position_offsets_x = {0., -0.015, -0.01, -0.005, 0.005, 0.01, 0.015};
   // const std::vector<double> position_offsets_x = {0.};
   const auto & convex = ground_segment_[current_moving_foot].convex;
   double maximized_distance_between_phalanxes = std::numeric_limits<double>::lowest();
