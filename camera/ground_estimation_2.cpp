@@ -703,19 +703,19 @@ int main(int argc, char * argv[])
     appli.robot_->update(log, cur_i);
   };
 
-  // open3d::visualization::Visualizer visualizer;
-  // if(!visualizer.CreateVisualizerWindow("Ground Estimation", 1280, 720, 50, 50))
-  // {
-  //   return false;
-  // }
+  open3d::visualization::Visualizer visualizer;
+  if(!visualizer.CreateVisualizerWindow("Ground Estimation", 1280, 720, 50, 50))
+  {
+    return false;
+  }
 
-  // visualizer.GetRenderOption().point_show_normal_ = false;
-  // visualizer.GetRenderOption().mesh_show_wireframe_ = false;
-  // visualizer.GetRenderOption().mesh_show_back_face_ = false;
+  visualizer.GetRenderOption().point_show_normal_ = false;
+  visualizer.GetRenderOption().mesh_show_wireframe_ = false;
+  visualizer.GetRenderOption().mesh_show_back_face_ = false;
 
   // // Open3D Rendering Loop
-  // visualizer.BuildUtilities();
-  // visualizer.UpdateWindowTitle();
+  visualizer.BuildUtilities();
+  visualizer.UpdateWindowTitle();
 
   // Offset for viewing
   Eigen::Matrix4d plus_offset_view = Eigen::Matrix4d::Identity();
@@ -853,6 +853,7 @@ int main(int argc, char * argv[])
       auto selectOnlyGrounds = [&](const std::vector<Eigen::Vector3d> & ground_points, double threshold_deg, double threshold_z)
       {
         std::vector<Eigen::Vector3d> ground;
+        std::vector<Eigen::Vector3d> not_ground;
 
         std::shared_ptr<open3d::geometry::PointCloud> pc(new open3d::geometry::PointCloud);
         pc->points_ = ground_points;
@@ -893,6 +894,83 @@ int main(int argc, char * argv[])
           {
             ground.push_back(pc->points_[i]);
           }
+          else
+          {
+            not_ground.push_back(pc->points_[i]);
+          }
+        }
+
+        std::sort(ground.begin(), ground.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+        std::sort(not_ground.begin(), not_ground.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+
+        std::vector<std::vector<Eigen::Vector3d>> group_ground;
+        group_ground.push_back(std::vector<Eigen::Vector3d>{});
+        if(!ground.empty())
+        {
+          group_ground.back().push_back(ground.front());
+          for(size_t i = 1; i < ground.size(); ++i)
+          {
+            if((ground[i] - group_ground.back().back()).norm() > 0.005)
+            {
+              group_ground.push_back(std::vector<Eigen::Vector3d>{});
+            }
+            group_ground.back().push_back(ground[i]);
+          }
+        }
+
+        std::vector<std::vector<Eigen::Vector3d>> group_not_ground;
+        group_not_ground.push_back(std::vector<Eigen::Vector3d>{});
+
+        if(!not_ground.empty())
+        {
+          group_not_ground.back().push_back(not_ground.front());
+          for(size_t i = 1; i < not_ground.size(); ++i)
+          {
+            if((not_ground[i] - group_not_ground.back().back()).norm() > 0.005)
+            {
+              group_not_ground.push_back(std::vector<Eigen::Vector3d>{});
+            }
+            group_not_ground.back().push_back(not_ground[i]);
+          }
+        }
+
+        if(!not_ground.empty() && !ground.empty())
+        {
+          // Case 0: We remove a ground group if it is just after a not ground group
+          std::vector<size_t> idxs_to_remove;
+          for(size_t i = 0; i < group_ground.size(); ++i)
+          {
+            for(size_t j = 0; j < group_not_ground.size(); ++j)
+            {
+              if((group_ground[i].front() - group_not_ground[j].back()).norm() < 0.005)
+              {
+                idxs_to_remove.push_back(i);
+              }
+            }
+          }
+
+          for(const auto & idx: idxs_to_remove)
+          {
+            group_ground.erase(group_ground.begin() + idx);
+          }
+        }
+
+
+        for(const auto & group: group_ground)
+        {
+          plot_3d(group, 10);
+        }
+
+        for(const auto & group: group_not_ground)
+        {
+          plot_3d(group, 11);
+        }
+
+        ground.clear();
+
+        for(const auto & group: group_ground)
+        {
+          ground.insert(ground.end(), group.begin(), group.end());
         }
 
         return ground;
@@ -1218,11 +1296,12 @@ int main(int argc, char * argv[])
         bool is_success = false;
         for(size_t i = 0; i < 5; ++i)
         {
+          // const std::vector<Eigen::Vector3d> ground = selectOnlyGrounds(foot_holder.new_ground_points_, threshold_degrees[0], threshold_z[2]);
           const std::vector<Eigen::Vector3d> ground = selectOnlyGrounds(foot_holder.new_ground_points_, threshold_degrees[i], threshold_z[i]);
 
           if(!ground.empty())
           {
-            plot_3d(ground, -1 - i);
+            // plot_3d(ground, -1 - i);
             plot_3d(foot_holder.new_ground_points_, 3);
 
             computePitchAndTzWithCeres(ground, foot_holder.pitch_, foot_holder.t_z_);
@@ -1491,6 +1570,34 @@ int main(int argc, char * argv[])
                      });
 
   logger->log();
+
+  // visualizer.AddGeometry(left_foot.reference_source);
+
+  foot_pose->PaintUniformColor(Eigen::Vector3d(1., 0.75, 0.));
+  // visualizer.AddGeometry(foot_pose);
+
+  std::shared_ptr<open3d::geometry::PointCloud> right_ground_selection(new open3d::geometry::PointCloud);
+  std::shared_ptr<open3d::geometry::PointCloud> left_ground_selection(new open3d::geometry::PointCloud);
+
+  left_ground_selection->points_ = left_foot.ground_points_;
+  left_ground_selection->PaintUniformColor(Eigen::Vector3d(1., 0.25, 0.75));
+  // visualizer.AddGeometry(left_ground_selection);
+
+  right_ground_selection->points_ = right_foot.ground_points_;
+  right_ground_selection->PaintUniformColor(Eigen::Vector3d(1., 0.25, 0.75));
+  // visualizer.AddGeometry(right_ground_selection);
+
+  std::shared_ptr<open3d::geometry::PointCloud> ref_right_ground_selection(new open3d::geometry::PointCloud);
+  std::shared_ptr<open3d::geometry::PointCloud> ref_left_ground_selection(new open3d::geometry::PointCloud);
+
+  ref_left_ground_selection->points_ = left_foot.logged_ground_points_;
+  ref_left_ground_selection->PaintUniformColor(Eigen::Vector3d(0., 0.0, 1.0));
+  // visualizer.AddGeometry(ref_left_ground_selection);
+
+  ref_right_ground_selection->points_ = right_foot.logged_ground_points_;
+  ref_right_ground_selection->PaintUniformColor(Eigen::Vector3d(0., 0.0, 1.0));
+  // visualizer.AddGeometry(ref_right_ground_selection);
+
 
   // while(visualizer.PollEvents())
   // {
