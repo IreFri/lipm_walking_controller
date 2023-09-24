@@ -289,13 +289,6 @@ void CameraSensorServer::do_computation()
     ground_points = pc->points_;
     std::sort(ground_points.begin(), ground_points.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
 
-    size_t idx_start = 0;
-    while(idx_start < ground_points.size() && (ground_points[idx_start].x() - ground_points.front().x()) < 0.20)
-    {
-      ++ idx_start;
-    }
-    ground_points.erase(ground_points.begin() + idx_start, ground_points.end());
-
     return ground_points;
   };
 
@@ -305,6 +298,8 @@ void CameraSensorServer::do_computation()
   auto selectOnlyGrounds = [this](const std::vector<Eigen::Vector3d> & ground_points, double threshold_deg, double threshold_z)
   {
     std::vector<Eigen::Vector3d> ground;
+    std::vector<Eigen::Vector3d> not_ground;
+
 
     std::shared_ptr<open3d::geometry::PointCloud> pc(new open3d::geometry::PointCloud);
     pc->points_ = ground_points;
@@ -344,6 +339,76 @@ void CameraSensorServer::do_computation()
       if(std::abs(angle * 180. / M_PI) < threshold_deg && pc->points_[i].z() < mean_z + threshold_z)
       {
         ground.push_back(pc->points_[i]);
+      }
+      else
+      {
+        not_ground.push_back(pc->points_[i]);
+      }
+    }
+
+    std::sort(ground.begin(), ground.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+    std::sort(not_ground.begin(), not_ground.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+
+    std::vector<std::vector<Eigen::Vector3d>> group_ground;
+    group_ground.push_back(std::vector<Eigen::Vector3d>{});
+    if(!ground.empty())
+    {
+      group_ground.back().push_back(ground.front());
+      for(size_t i = 1; i < ground.size(); ++i)
+      {
+        if((ground[i] - group_ground.back().back()).norm() > 0.005)
+        {
+          group_ground.push_back(std::vector<Eigen::Vector3d>{});
+        }
+        group_ground.back().push_back(ground[i]);
+      }
+    }
+
+    std::vector<std::vector<Eigen::Vector3d>> group_not_ground;
+    group_not_ground.push_back(std::vector<Eigen::Vector3d>{});
+
+    if(!not_ground.empty())
+    {
+      group_not_ground.back().push_back(not_ground.front());
+      for(size_t i = 1; i < not_ground.size(); ++i)
+      {
+        if((not_ground[i] - group_not_ground.back().back()).norm() > 0.005)
+        {
+          group_not_ground.push_back(std::vector<Eigen::Vector3d>{});
+        }
+        group_not_ground.back().push_back(not_ground[i]);
+      }
+    }
+
+    if(!not_ground.empty() && !ground.empty())
+    {
+      // Case 0: We remove a ground group if it is just after a not ground group
+      std::vector<size_t> idxs_to_remove;
+      for(size_t i = 0; i < group_ground.size(); ++i)
+      {
+        for(size_t j = 0; j < group_not_ground.size(); ++j)
+        {
+          if((group_ground[i].front() - group_not_ground[j].back()).norm() < 0.005)
+          {
+            idxs_to_remove.push_back(i);
+            break;
+          }
+        }
+      }
+
+      std::reverse(idxs_to_remove.begin(), idxs_to_remove.end());
+      for(const auto & idx: idxs_to_remove)
+      {
+        group_ground.erase(group_ground.begin() + idx);
+      }
+    }
+
+    ground.clear();
+    for(const auto & group: group_ground)
+    {
+      if(!group.empty())
+      {
+        ground.insert(ground.end(), group.begin(), group.end());
       }
     }
 
@@ -592,6 +657,13 @@ void CameraSensorServer::do_computation()
 
     std::sort(res.begin(), res.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
 
+    // size_t idx_start = 0;
+    // while(idx_start < res.size() && (res[idx_start].x() - res.front().x()) < 0.20)
+    // {
+    //   ++ idx_start;
+    // }
+    // res.erase(res.begin() + idx_start, res.end());
+
     return res;
   };
 
@@ -687,11 +759,11 @@ void CameraSensorServer::do_computation()
 
     new_ground_points_ = pre_new_ground_points_;
 
-    std::array<double, 5> threshold_degrees = {45., 25., 15., 15., 15.};
-    std::array<double, 5> threshold_z = {0.05, 0.05, 0.025, 0.01, 0.002};
+    std::array<double, 3> threshold_degrees = {45., 15., 15.};
+    std::array<double, 3> threshold_z = {0.05, 0.01, 0.002};
 
     bool is_success = false;
-    for(size_t i = 0; i < 5; ++i)
+    for(size_t i = 0; i < threshold_degrees.size(); ++i)
     {
       const std::vector<Eigen::Vector3d> ground = selectOnlyGrounds(new_ground_points_, threshold_degrees[i], threshold_z[i]);
 
@@ -729,7 +801,7 @@ void CameraSensorServer::do_computation()
     std::shared_ptr<open3d::geometry::PointCloud> target(new open3d::geometry::PointCloud);
     target->points_ = ground_points_;
 
-    const auto front = Eigen::Vector3d(X_0_b_.translation().x() + 0.0, X_0_b_.translation().y() - 0.10, -0.10);
+    const auto front = Eigen::Vector3d(X_0_b_.translation().x() + 0.10, X_0_b_.translation().y() - 0.10, -0.10);
     const auto back = Eigen::Vector3d(Eigen::Vector3d(X_0_b_.translation().x() + 0.55, X_0_b_.translation().x() + 0.10, 0.10));
     target = target->Crop(open3d::geometry::AxisAlignedBoundingBox(front, back));
 

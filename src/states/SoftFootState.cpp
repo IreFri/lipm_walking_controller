@@ -371,6 +371,7 @@ void SoftFootState::runState()
       }
       ctl.logger().addLogEntry("MyMeasures_" + name + "_k", [this, foot]() { return foot_data_[foot].k;} );
       ctl.logger().addLogEntry("MyMeasures_" + name + "_angle", [this, foot]() { return foot_data_[foot].angle;} );
+      ctl.logger().addLogEntry("MyMeasures_" + name + "_z_offset", [this, foot]() { return foot_data_[foot].position_offset_z;} );
       ctl.logger().addLogEntry("MyMeasures_" + name + "_min_max_phalanxes_angle", [this, foot]() { return foot_data_[foot].min_max_phalanxes_angle;} );
       ctl.logger().addLogEntry("MyMeasures_" + name + "_position_offset", [this, foot]() { return foot_data_[foot].position_offset_x;} );
       ctl.logger().addLogEntry("MyMeasures_" + name + "_phalanxes_x", [this, foot]()
@@ -1721,6 +1722,7 @@ void SoftFootState::reset(mc_control::fsm::Controller & ctl, const Foot & foot)
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_convex_y");
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_k");
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_angle");
+  ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_z_offset");
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_min_max_phalanxes_angle");
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_position_offset");
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_phalanxes_x");

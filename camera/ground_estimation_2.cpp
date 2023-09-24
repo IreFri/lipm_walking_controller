@@ -836,14 +836,6 @@ int main(int argc, char * argv[])
         pc = pc->VoxelDownSample(0.003);
         ground_points = pc->points_;
         std::sort(ground_points.begin(), ground_points.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
-
-        size_t idx_start = 0;
-        while(idx_start < ground_points.size() && (ground_points[idx_start].x() - ground_points.front().x()) < 0.20)
-        {
-          ++ idx_start;
-        }
-        ground_points.erase(ground_points.begin() + idx_start, ground_points.end());
-
         return ground_points;
       };
 
@@ -945,10 +937,12 @@ int main(int argc, char * argv[])
               if((group_ground[i].front() - group_not_ground[j].back()).norm() < 0.005)
               {
                 idxs_to_remove.push_back(i);
+                break;
               }
             }
           }
 
+          std::reverse(idxs_to_remove.begin(), idxs_to_remove.end());
           for(const auto & idx: idxs_to_remove)
           {
             group_ground.erase(group_ground.begin() + idx);
@@ -967,10 +961,12 @@ int main(int argc, char * argv[])
         }
 
         ground.clear();
-
         for(const auto & group: group_ground)
         {
-          ground.insert(ground.end(), group.begin(), group.end());
+          if(!group.empty())
+          {
+            ground.insert(ground.end(), group.begin(), group.end());
+          }
         }
 
         return ground;
@@ -1219,6 +1215,13 @@ int main(int argc, char * argv[])
 
         std::sort(res.begin(), res.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
 
+        // size_t idx_start = 0;
+        // while(idx_start < res.size() && (res[idx_start].x() - res.front().x()) < 0.20)
+        // {
+        //   ++ idx_start;
+        // }
+        // res.erase(res.begin() + idx_start, res.end());
+
         return res;
       };
 
@@ -1290,13 +1293,12 @@ int main(int argc, char * argv[])
 
         foot_holder.new_ground_points_ = foot_holder.pre_new_ground_points_;
 
-        std::array<double, 5> threshold_degrees = {45., 25., 15., 15., 15.};
-        std::array<double, 5> threshold_z = {0.05, 0.05, 0.025, 0.01, 0.002};
+        std::array<double, 3> threshold_degrees = {45., 15., 15.};
+        std::array<double, 3> threshold_z = {0.05, 0.01, 0.002};
 
         bool is_success = false;
-        for(size_t i = 0; i < 5; ++i)
+        for(size_t i = 0; i < threshold_degrees.size(); ++i)
         {
-          // const std::vector<Eigen::Vector3d> ground = selectOnlyGrounds(foot_holder.new_ground_points_, threshold_degrees[0], threshold_z[2]);
           const std::vector<Eigen::Vector3d> ground = selectOnlyGrounds(foot_holder.new_ground_points_, threshold_degrees[i], threshold_z[i]);
 
           if(!ground.empty())
@@ -1346,7 +1348,9 @@ int main(int argc, char * argv[])
         std::shared_ptr<open3d::geometry::PointCloud> target(new open3d::geometry::PointCloud);
         target->points_ = foot_holder.ground_points_;
 
-        const auto front = Eigen::Vector3d(foot_holder._X_0_b.translation().x() + 0.0, foot_holder._X_0_b.translation().y() - 0.10, -0.10);
+        foot_pose->points_.push_back(Eigen::Vector3d(foot_holder._X_0_b.translation().x(), foot_holder._X_0_b.translation().y(), foot_holder._X_0_b.translation().z()));
+
+        const auto front = Eigen::Vector3d(foot_holder._X_0_b.translation().x() + 0.10, foot_holder._X_0_b.translation().y() - 0.10, -0.10);
         const auto back = Eigen::Vector3d(Eigen::Vector3d(foot_holder._X_0_b.translation().x() + 0.55, foot_holder._X_0_b.translation().x() + 0.10, 0.10));
         target = target->Crop(open3d::geometry::AxisAlignedBoundingBox(front, back));
 
@@ -1417,37 +1421,68 @@ int main(int argc, char * argv[])
 
       plot_3d(foot_holder.new_ground_points_, 6);
 
-      if(foot_holder.historic_points_.empty())
       {
-        foot_holder.historic_points_ = foot_holder.new_ground_points_;
-      }
+        auto start = std::chrono::high_resolution_clock::now();
 
-      if(!foot_holder.new_ground_points_.empty())
-      {
-        if(foot_holder.live_ground_points_.size() == 3)
+        if(foot_holder.historic_points_.empty())
         {
-          foot_holder.live_ground_points_.pop_front();
+          foot_holder.historic_points_ = foot_holder.new_ground_points_;
         }
-        foot_holder.live_ground_points_.push_back(foot_holder.new_ground_points_);
-      }
 
-      if(foot_holder.live_ground_points_.front().front().x() < foot_holder.new_ground_points_.front().x())
-      {
-        size_t idx_start = 0;
-        while(idx_start < foot_holder.historic_points_.size() && foot_holder.new_ground_points_.front().x() > foot_holder.historic_points_[idx_start].x())
+        if(!foot_holder.new_ground_points_.empty())
         {
-          ++ idx_start;
+          if(foot_holder.live_ground_points_.size() == 3)
+          {
+            foot_holder.live_ground_points_.pop_front();
+          }
+          foot_holder.live_ground_points_.push_back(foot_holder.new_ground_points_);
         }
-        foot_holder.historic_points_.erase(foot_holder.historic_points_.begin() + idx_start, foot_holder.historic_points_.end());
+
+        if(foot_holder.live_ground_points_.front().front().x() < foot_holder.new_ground_points_.front().x())
+        {
+          size_t idx_start = 0;
+          while(idx_start < foot_holder.historic_points_.size() && foot_holder.new_ground_points_.front().x() > foot_holder.historic_points_[idx_start].x())
+          {
+            ++ idx_start;
+          }
+          foot_holder.historic_points_.erase(foot_holder.historic_points_.begin() + idx_start, foot_holder.historic_points_.end());
+          for(const auto & points: foot_holder.live_ground_points_)
+          {
+            foot_holder.historic_points_.insert(foot_holder.historic_points_.end(), points.begin(), points.end());
+          }
+          foot_holder.historic_points_.insert(foot_holder.historic_points_.end(), foot_holder.new_ground_points_.begin(), foot_holder.new_ground_points_.end());
+          std::sort(foot_holder.historic_points_.begin(), foot_holder.historic_points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+        }
+
+        foot_holder.ground_points_ = foot_holder.historic_points_;
         for(const auto & points: foot_holder.live_ground_points_)
         {
-          foot_holder.historic_points_.insert(foot_holder.historic_points_.end(), points.begin(), points.end());
+          foot_holder.ground_points_.insert(foot_holder.ground_points_.end(), points.begin(), points.end());
         }
-        foot_holder.historic_points_.insert(foot_holder.historic_points_.end(), foot_holder.new_ground_points_.begin(), foot_holder.new_ground_points_.end());
-        std::sort(foot_holder.historic_points_.begin(), foot_holder.historic_points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+
+        std::shared_ptr<open3d::geometry::PointCloud> pc(new open3d::geometry::PointCloud);
+        pc->points_ = foot_holder.ground_points_;
+        pc = pc->VoxelDownSample(0.002);
+        foot_holder.ground_points_ = pc->points_;
+        std::sort(foot_holder.ground_points_.begin(), foot_holder.ground_points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+
+        foot_holder.corrected_ground_points_.clear();
+        for(const auto & p: foot_holder.ground_points_)
+        {
+          foot_holder.corrected_ground_points_.push_back(Eigen::Vector3d(p.x(), foot_holder.X_0_b.translation().y(), p.z()));
+        }
+
+        auto stop = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+        mc_rtc::log::info("Took {} ms for [Historic and update]", static_cast<double>(duration.count()) / 1000.);
       }
 
-      foot_holder.ground_points_ = foot_holder.historic_points_;
+      auto stop_computation = std::chrono::high_resolution_clock::now();
+      auto duration_computation = std::chrono::duration_cast<std::chrono::microseconds>(stop_computation - start_computation);
+      mc_rtc::log::info("Took {} ms for [Everything]", static_cast<double>(duration_computation.count()) / 1000.);
+
+      plot_3d(foot_holder.historic_points_, 12);
+
       size_t kkk = 7;
       for(const auto & points: foot_holder.live_ground_points_)
       {
@@ -1460,28 +1495,8 @@ int main(int argc, char * argv[])
         }
         red->PaintUniformColor(Eigen::Vector3d(1., 0., 0.));
         ++ kkk;
-        // visualizer.AddGeometry(red);
-
-        foot_holder.ground_points_.insert(foot_holder.ground_points_.end(), points.begin(), points.end());
+        visualizer.AddGeometry(red);
       }
-
-      std::shared_ptr<open3d::geometry::PointCloud> pc(new open3d::geometry::PointCloud);
-      pc->points_ = foot_holder.ground_points_;
-      pc = pc->VoxelDownSample(0.002);
-      foot_holder.ground_points_ = pc->points_;
-      std::sort(foot_holder.ground_points_.begin(), foot_holder.ground_points_.end(), [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
-
-      foot_holder.corrected_ground_points_.clear();
-      for(const auto & p: foot_holder.ground_points_)
-      {
-        foot_holder.corrected_ground_points_.push_back(Eigen::Vector3d(p.x(), foot_holder.X_0_b.translation().y(), p.z()));
-      }
-
-      plot_3d(foot_holder.historic_points_, 12);
-
-      auto stop_computation = std::chrono::high_resolution_clock::now();
-      auto duration_computation = std::chrono::duration_cast<std::chrono::microseconds>(stop_computation - start_computation);
-      mc_rtc::log::info("Took {} ms for [Everything]", static_cast<double>(duration_computation.count()) / 1000.);
 
       // std::shared_ptr<open3d::geometry::PointCloud> red(new open3d::geometry::PointCloud);
       std::shared_ptr<open3d::geometry::PointCloud> green(new open3d::geometry::PointCloud);
