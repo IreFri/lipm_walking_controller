@@ -264,6 +264,7 @@ void CameraSensorServer::do_computation()
 {
   if(data_->skip)
   {
+    data_->result_ready->notify_all();
     return;
   }
 
@@ -688,6 +689,7 @@ void CameraSensorServer::do_computation()
 
   if(new_camera_points_.empty())
   {
+    data_->result_ready->notify_all();
     return;
   }
 
