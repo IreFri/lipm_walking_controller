@@ -119,6 +119,8 @@ public:
   //! IK task gain
   TaskGain taskGain_;
 
+  mutable double t_ = 0.;
+
 protected:
   //! Time when touch down is detected (-1 if not detected)
   double touchDownTime_ = -1;
