@@ -113,12 +113,7 @@ public:
   /** \brief Update the internal state of the swing trajectory.
       \param pitch pitch angle
   */
-  virtual void updatePitch(double pitch) override;
-
-  /** \brief Update the internal state of the swing trajectory.
-      \param x_offset x offset
-  */
-  virtual void updatePosXZ(double x_offset, double z_offset) override;
+  virtual void update(double pitch, double x_offset, double z_offset) override;
 
   void compute();
 
