@@ -102,7 +102,8 @@ private:
   bool autoplay_ = false; /**< Has the user clicked on "Start walking"? */
   std::vector<std::string> autoplay_plans_; /** Plans to play if config(autoplay) = true */
   double leftFootRatio_; /**< Left foot ratio from GUI input */
-
+  bool delayStartWalking_ = false;
+  int delayStartWalkingCounter_ = 0;
   /* Tsuru add */
   lipm_walking::Contact supportContact_; // Keep the last contact foot stably.
   lipm_walking::Contact targetContact_; // Keep the last contact foot stably.

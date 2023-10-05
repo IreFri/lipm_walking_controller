@@ -785,7 +785,7 @@ void SoftFootState::extractGroundSegment(mc_control::fsm::Controller & ctl, cons
     [&](const Eigen::Vector3d & v) { return v.x() >= landing.x() + landing_to_foot_middle_offset_ + foot_length_ * 0.5 + extra_to_compute_best_position_; });
 
   // Save the selected segment in raw data of ground segment structure
-  // ground_segment_[current_moving_foot].raw.clear();
+  ground_segment_[current_moving_foot].raw.clear();
   std::vector<Eigen::Vector3d> raw;
   std::transform(begin_iterator, end_iterator, std::back_inserter(raw), [](const Eigen::Vector3d & v) { return v; });
 
@@ -1449,7 +1449,7 @@ void SoftFootState::computeFootLandingPosition(const Foot & current_moving_foot,
         distance_between_phalanxes_right = std::abs(right_contact_points.back().x() - right_side_phalanxes_pos.back().x());
       }
 
-      distance_between_phalanxes = std::min(distance_between_phalanxes_right, distance_between_phalanxes_left);
+      distance_between_phalanxes = std::max(distance_between_phalanxes_right, distance_between_phalanxes_left);
 
       std::cout << "distance_between_phalanxes " << distance_between_phalanxes << std::endl;
     }

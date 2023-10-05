@@ -890,6 +890,24 @@ void CameraSensorServer::do_computation()
     {
       ++ idx_start;
     }
+
+    size_t size = std::min(size_t(20), live_ground_points_.front().size());
+    if(idx_start + size < historic_points_.size())
+    {
+      double sum_diff = 0.;
+      for(size_t i = 0; i < size; ++i)
+      {
+        sum_diff += std::abs((historic_points_.begin() + idx_start + i)->z() - live_ground_points_.front()[i].z());
+      }
+      sum_diff /= static_cast<double>(size);
+
+      if(sum_diff > 0.005)
+      {
+        idx_start += 20;
+        idx_start = std::min(idx_start, historic_points_.size());
+      }
+    }
+
     historic_points_.erase(historic_points_.begin() + idx_start, historic_points_.end());
     for(const auto & points: live_ground_points_)
     {
