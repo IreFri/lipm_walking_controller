@@ -77,6 +77,9 @@ robot_models:
       friction: 0.7
       leftAnkleOffset: [0.,0.] # target center of foot
   hrp4cr:
+    swingfoot:
+      weight: 3000
+      stiffness: 500
     stabilizer:
       dcm_tracking:
         gains:
@@ -636,8 +639,8 @@ plans:
             translation: [0.0, 0.07, 0.0]
           surface: LeftFootCenter
     custom_forward:
-      double_support_duration: 0.4
-      single_support_duration: 1.2
+      double_support_duration: 0.6
+      single_support_duration: 1.5
       step_length: 0.15
       swing_height: 0.06
       com_height: 0.817301

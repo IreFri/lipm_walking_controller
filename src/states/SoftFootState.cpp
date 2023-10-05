@@ -1440,13 +1440,13 @@ void SoftFootState::computeFootLandingPosition(const Foot & current_moving_foot,
       double distance_between_phalanxes_left = 0.;
       if(left_contact_points.size() > 0)
       {
-        distance_between_phalanxes_left = left_side_phalanxes_pos.back().x() - left_contact_points.back().x();
+        distance_between_phalanxes_left = std::abs(left_side_phalanxes_pos.back().x() - left_contact_points.back().x());
       }
 
       double distance_between_phalanxes_right = 0.;
       if(right_contact_points.size() > 0)
       {
-        distance_between_phalanxes_right = right_contact_points.back().x() - right_side_phalanxes_pos.back().x();
+        distance_between_phalanxes_right = std::abs(right_contact_points.back().x() - right_side_phalanxes_pos.back().x());
       }
 
       distance_between_phalanxes = std::min(distance_between_phalanxes_right, distance_between_phalanxes_left);
