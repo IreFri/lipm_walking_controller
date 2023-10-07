@@ -723,8 +723,8 @@ void CameraSensorServer::do_computation()
     if(duration_computation.count() / 1000. > 33.0)
     {
       mc_rtc::log::error("Timeout");
-      data_->result_ready->notify_all();
-      return;
+      // data_->result_ready->notify_all();
+      // return;
     }
   }
 
@@ -743,8 +743,8 @@ void CameraSensorServer::do_computation()
     if(duration_computation.count() / 1000. > 33.0)
     {
       mc_rtc::log::error("Timeout");
-      data_->result_ready->notify_all();
-      return;
+      // data_->result_ready->notify_all();
+      // return;
     }
   }
 
@@ -761,7 +761,7 @@ void CameraSensorServer::do_computation()
 
     new_ground_points_ = pre_new_ground_points_;
 
-    std::array<double, 3> threshold_degrees = {45., 15., 15.};
+    std::array<double, 3> threshold_degrees = {45., 15., 5.};
     std::array<double, 3> threshold_z = {0.05, 0.01, 0.002};
 
     bool is_success = false;
@@ -818,7 +818,7 @@ void CameraSensorServer::do_computation()
     std::vector<Eigen::Vector3d> src_obstacles = selectObstacles(new_ground_points_, true);
     std::vector<Eigen::Vector3d> target_obstacles = selectObstacles(target->points_);
 
-    if(!src_obstacles.empty() && !target_obstacles.empty())
+    if(src_obstacles.size() > 5 && target_obstacles.size() > 5)
     {
       double t_x = 0.;
       ceres::Problem problem;

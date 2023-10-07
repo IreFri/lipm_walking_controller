@@ -1627,7 +1627,7 @@ void SoftFootState::updateFootSwingPose(mc_control::fsm::Controller & ctl, const
   double desired_offset_position_z = foot_data_[current_moving_foot].position_offset_z;
   if(desired_angle > 0.075)
   {
-    desired_offset_position_z *= 1.5 + 0.005;
+    desired_offset_position_z *= 1.5;
   }
   if(!with_foot_adjustment_ && !with_ankle_rotation_)
   {
