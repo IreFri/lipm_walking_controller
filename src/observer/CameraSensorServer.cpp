@@ -723,8 +723,8 @@ void CameraSensorServer::do_computation()
     if(duration_computation.count() / 1000. > 33.0)
     {
       mc_rtc::log::error("Timeout");
-      data_->result_ready->notify_all();
-      return;
+      // data_->result_ready->notify_all();
+      // return;
     }
   }
 
@@ -743,8 +743,8 @@ void CameraSensorServer::do_computation()
     if(duration_computation.count() / 1000. > 33.0)
     {
       mc_rtc::log::error("Timeout");
-      data_->result_ready->notify_all();
-      return;
+      // data_->result_ready->notify_all();
+      // return;
     }
   }
 
