@@ -166,6 +166,7 @@ void SwingTrajCubicSplineSimple::compute()
   posFunc_->appendFunc(endTime_, approachPosSpline);
   // Rot
   rotFunc_->appendPoint(std::make_pair(t_, X_0_P.rotation().transpose()));
+  rotFunc_->appendPoint(std::make_pair(t_ + (endTime_ - t_) * 0.5, endPose_.rotation().transpose()));
   rotFunc_->appendPoint(std::make_pair(endTime_, endPose_.rotation().transpose()));
   rotFunc_->calcCoeff();
 
