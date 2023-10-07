@@ -348,7 +348,7 @@ void SoftFootState::runState()
         {
           std::vector<double> d;
           std::transform(ground_segment_[foot].filtered.begin(), ground_segment_[foot].filtered.end(), std::back_inserter(d),
-            [](const Eigen::Vector3d & v) { return v.y(); });
+            [](const Eigen::Vector3d & v) { return v.z(); });
           return d;
         });
       ctl.logger().addLogEntry("MyMeasures_" + name + "_convex_x", [this, foot]()
@@ -362,7 +362,7 @@ void SoftFootState::runState()
         {
           std::vector<double> d;
           std::transform(ground_segment_[foot].convex.begin(), ground_segment_[foot].convex.end(), std::back_inserter(d),
-            [](const Eigen::Vector3d & v) { return v.y(); });
+            [](const Eigen::Vector3d & v) { return v.z(); });
           return d;
         });
       for(const auto & range_sensor_name: range_sensor_names_[foot])
