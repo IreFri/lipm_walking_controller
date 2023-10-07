@@ -1606,7 +1606,7 @@ void SoftFootState::updateFootSwingPose(mc_control::fsm::Controller & ctl, const
 {
   auto & ctrl = controller();
   // Get the angle
-  double desired_angle = foot_data_[current_moving_foot].angle;
+  double desired_angle = foot_data_[current_moving_foot].angle * 1.25;
   if(!with_ankle_rotation_)
   {
     desired_angle = 0.;
