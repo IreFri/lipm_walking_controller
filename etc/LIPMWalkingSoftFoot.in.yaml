@@ -6,7 +6,7 @@ SwingTraj:
     withdrawOffset: [0, 0, 0.015] # [m]
     approachDurationRatio: 0.25
     approachOffset: [0, 0, 0.015] # [m]
-    swingOffset: [0, 0, 0.05] # [m]
+    swingOffset: [0, 0, 0.06] # [m]
   LandingSearch:
     withdrawDurationRatio: 0.2
     withdrawOffset: [0, 0, 0.04] # [m]
