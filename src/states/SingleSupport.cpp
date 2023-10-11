@@ -246,8 +246,10 @@ bool states::SingleSupport::detectTouchdown(const std::shared_ptr<mc_tasks::Surf
   double xDist = std::abs(X_c_s.translation().x());
   double yDist = std::abs(X_c_s.translation().y());
   double zDist = std::abs(X_c_s.translation().z());
+  double Fx = controller().robot().surfaceWrench(footTask->surface()).force().x();
   double Fz = controller().robot().surfaceWrench(footTask->surface()).force().z();
-  return (xDist < 0.01 && yDist < 0.01 && zDist < 0.01 && Fz > 50.);
+  // return (xDist < 0.03 && yDist < 0.03 && zDist < 0.03 && Fz > 50.);
+  return (xDist < 0.03 && yDist < 0.03 && zDist < 0.03 && (Fz > 50. || Fz < -50.));
 }
 
 void states::SingleSupport::updatePreview()
