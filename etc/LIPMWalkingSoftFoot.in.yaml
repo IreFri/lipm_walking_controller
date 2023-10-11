@@ -3,9 +3,9 @@ initial_plan: custom_forward
 SwingTraj:
   CubicSplineSimple:
     withdrawDurationRatio: 0.25
-    withdrawOffset: [0, 0, 0.015] # [m]
+    withdrawOffset: [0, 0, 0.035] # [m]
     approachDurationRatio: 0.25
-    approachOffset: [0, 0, 0.015] # [m]
+    approachOffset: [0, 0, 0.035] # [m]
     swingOffset: [0, 0, 0.06] # [m]
   LandingSearch:
     withdrawDurationRatio: 0.2
@@ -78,7 +78,7 @@ robot_models:
       leftAnkleOffset: [0.,0.] # target center of foot
   hrp4cr:
     swingfoot:
-      weight: 3000
+      weight: 2000
       stiffness: 500
     stabilizer:
       dcm_tracking:

@@ -1415,7 +1415,7 @@ void SoftFootState::computeFootLandingPosition(const Foot & current_moving_foot,
       const Eigen::Vector3d phalanx_pos_end = (sva::PTransformd(Eigen::Vector3d(-foot_length_ * 0.5 + landing_to_foot_middle_offset_ + (n_phalanx + 1) * phalanx_length_, 0., 0.)) * landing_pos).translation();
 
       // Compute landing theta at this point for the n-th phalanx
-      const double theta = computeThetaBasedOnQhull(phalanx_pos_start, phalanx_pos_end);
+      const double theta = 0.;
 
       // double theta = 0.;
 
@@ -1430,26 +1430,14 @@ void SoftFootState::computeFootLandingPosition(const Foot & current_moving_foot,
         phalanx_pos.z() + (0.5 * phalanx_length_) * std::sin(theta)
       );
 
-      // Compute right part
-      right_side_phalanxes_pos = computeSide(n_phalanx, nr_phalanxes_, -1., phalanx_pos, 0.,
-        right_side_phalanxes_theta, right_contact_points, true);
-
-      left_side_phalanxes_pos = computeSide(n_phalanx, nr_phalanxes_, +1., phalanx_pos, 0.,
-        left_side_phalanxes_theta, left_contact_points, true);
-
-      double distance_between_phalanxes_left = 0.;
-      if(left_contact_points.size() > 0)
+      if(std::abs(highest_point_on_convex.x() - phalanx_pos_right.x()) > std::abs(highest_point_on_convex.x() - phalanx_pos_left.x()))
       {
-        distance_between_phalanxes_left = std::abs(left_side_phalanxes_pos.back().x() - left_contact_points.back().x());
+        distance_between_phalanxes = std::abs(highest_point_on_convex.x() - phalanx_pos_right.x());
       }
-
-      double distance_between_phalanxes_right = 0.;
-      if(right_contact_points.size() > 0)
+      else
       {
-        distance_between_phalanxes_right = std::abs(right_contact_points.back().x() - right_side_phalanxes_pos.back().x());
+        distance_between_phalanxes = std::abs(highest_point_on_convex.x() - phalanx_pos_left.x());
       }
-
-      distance_between_phalanxes = std::max(distance_between_phalanxes_right, distance_between_phalanxes_left);
 
       std::cout << "distance_between_phalanxes " << distance_between_phalanxes << std::endl;
     }
