@@ -160,7 +160,6 @@ void states::Standing::start()
     gui_.addElement({"Walking", "Main"},
                     Button(!controller().pauseWalking || (supportContact_.id == 0) ? "Start walking" : "Resume walking",
                            [this]() { startWalking(); }));
-
   }
 
   runState(); // don't wait till next cycle to update reference and tasks
@@ -211,7 +210,7 @@ void states::Standing::runState()
   }
   else if(delayStartWalking_)
   {
-    ++ delayStartWalkingCounter_;
+    ++delayStartWalkingCounter_;
   }
 }
 

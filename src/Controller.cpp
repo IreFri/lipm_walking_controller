@@ -43,154 +43,6 @@ Controller::Controller(mc_rbdyn::RobotModulePtr robotModule,
 : mc_control::fsm::Controller(robotModule, dt, config, params), planInterpolator(gui()), externalFootstepPlanner(*this),
   halfSitPose(controlRobot().mbc().q)
 {
-  auto robotConfig = config("robot_models")(controlRobot().name());
-  auto planConfig = config("plans")(controlRobot().name());
-  if(planConfig.has("external"))
-  {
-    externalFootstepPlanner.configure(planConfig("external"));
-  }
-
-  mc_rtc::log::info("Loading default stabilizer configuration");
-  defaultStabilizerConfig_ = robot().module().defaultLIPMStabilizerConfiguration();
-  if(robotConfig.has("stabilizer"))
-  {
-    mc_rtc::log::info("Loading additional stabilizer configuration");
-    defaultStabilizerConfig_.load(robotConfig("stabilizer"));
-    // mc_rtc::log::info("Stabilizer Configuration:\n{}", defaultStabilizerConfig_.save().dump(true));
-  }
-
-  // Patch CoM height and step width in all plans
-  std::vector<std::string> plans = planConfig.keys();
-  double comHeight = defaultStabilizerConfig_.comHeight;
-  for(const auto & p : plans)
-  {
-    auto plan = planConfig(p);
-    if(!plan.has("com_height"))
-    {
-      plan.add("com_height", comHeight);
-    }
-  }
-
-  double postureStiffness = config("tasks")("posture")("stiffness");
-  double postureWeight = config("tasks")("posture")("weight");
-  postureTask = getPostureTask(robot().name());
-  postureTask->stiffness(postureStiffness);
-  postureTask->weight(postureWeight);
-
-  // Set half-sitting pose for posture task
-  const auto & halfSit = robotModule->stance();
-  const auto & refJointOrder = robot().refJointOrder();
-  for(unsigned i = 0; i < refJointOrder.size(); ++i)
-  {
-    if(robot().hasJoint(refJointOrder[i]))
-    {
-      halfSitPose[robot().jointIndexByName(refJointOrder[i])] = halfSit.at(refJointOrder[i]);
-    }
-  }
-
-  // Read sole properties from robot model and configuration file
-  sva::PTransformd X_0_lfc = controlRobot().surfacePose("LeftFootCenter");
-  sva::PTransformd X_0_rfc = controlRobot().surfacePose("RightFootCenter");
-  sva::PTransformd X_0_lf = controlRobot().surfacePose("LeftFoot");
-  sva::PTransformd X_lfc_lf = X_0_lf * X_0_lfc.inv();
-  sva::PTransformd X_rfc_lfc = X_0_lfc * X_0_rfc.inv();
-  double stepWidth = X_rfc_lfc.translation().y();
-  sole_ = robotConfig("sole");
-
-  // If an ankle offset is specified use it, otherwise compute it
-  if(robotConfig("sole").has("leftAnkleOffset"))
-  {
-    sole_.leftAnkleOffset = robotConfig("sole")("leftAnkleOffset");
-  }
-  else
-  {
-    sole_.leftAnkleOffset = X_lfc_lf.translation().head<2>();
-  }
-
-  // Configure MPC solver
-  mpcConfig_ = config("mpc");
-  mpc_.sole(sole_);
-
-  // ====================
-  // Create Stabilizer
-  // - Default configuration from the robot module
-  // - Additional configuration from the configuration, in section robot_models/robot_name/stabilizer
-  // ====================
-  // clang-format off
-  stabilizer_.reset(
-    new mc_tasks::lipm_stabilizer::StabilizerTask(
-      solver().robots(),
-      solver().realRobots(),
-      robot().robotIndex(),
-      defaultStabilizerConfig_.leftFootSurface,
-      defaultStabilizerConfig_.rightFootSurface,
-      defaultStabilizerConfig_.torsoBodyName,
-      solver().dt()));
-  // clang-format on
-  stabilizer_->configure(defaultStabilizerConfig_);
-
-  // Read footstep plans from configuration
-  planInterpolator.configure(planConfig);
-  planInterpolator.stepWidth(stepWidth);
-  std::string initialPlan = planInterpolator.availablePlans()[0];
-  config("initial_plan", initialPlan);
-  loadFootstepPlan(initialPlan);
-
-  // =========================
-  // Create Swing trajectory generator
-  // =========================
-  if (robotConfig.has("SwingTraj"))
-  {
-    if(robotConfig("SwingTraj").has("type"))
-    {
-      swingTrajType = static_cast<std::string>(robotConfig("SwingTraj")("type"));
-      for(const auto& key: robotConfig("SwingTraj").keys())
-      {
-        config_("SwingTraj")(swingTrajType).add(key, robotConfig("SwingTraj")(key));
-      }
-
-      mc_rtc::log::info("Loaded {} from {}:\n{}", swingTrajType, robot().name(), config_("SwingTraj")(swingTrajType).dump(true, true));
-
-      if(swingTrajType == "CubicSplineSimple")
-      {
-        BWC::SwingTrajCubicSplineSimple::loadDefaultConfig(config_("SwingTraj")("CubicSplineSimple", config_("SwingTraj")(swingTrajType)));
-      }
-      else if(swingTrajType == "LandingSearch")
-      {
-        BWC::SwingTrajLandingSearch::loadDefaultConfig(config_("SwingTraj")("LandingSearch", config_("SwingTraj")(swingTrajType)));
-      }
-    }
-    else
-    {
-      mc_rtc::log::error("You did not define the type");
-    }
-  }
-  mc_rtc::log::info("The chosen swing trajectory type is '{}'", swingTrajType);
-
-  // =========================
-  // Create Swing foot tasks
-  // =========================
-  double swingWeight = 1000;
-  double swingStiffness = 500;
-  if(robotConfig.has("swingfoot"))
-  {
-    robotConfig("swingfoot")("weight", swingWeight);
-    robotConfig("swingfoot")("stiffness", swingStiffness);
-  }
-  swingFootTaskRight_.reset(new mc_tasks::SurfaceTransformTask("RightFootCenter", robots(), robots().robotIndex(),
-                                                               swingWeight, swingStiffness));
-  swingFootTaskLeft_.reset(new mc_tasks::SurfaceTransformTask("LeftFootCenter", robots(), robots().robotIndex(),
-                                                              swingWeight, swingStiffness));
-
-  addLogEntries(logger());
-  mpc_.addLogEntries(logger());
-
-  if(gui_)
-  {
-    addGUIElements(gui_);
-    mpc_.addGUIElements(gui_);
-  }
-
   // Update observers
   datastore().make_call("KinematicAnchorFrame::" + robot().name(),
                         [this](const mc_rbdyn::Robot & robot)
@@ -257,30 +109,29 @@ void Controller::addGUIElements(std::shared_ptr<mc_rtc::gui::StateBuilder> gui)
 
   gui->addElement({"Walking", "CoM"}, Label("Plan name", [this]() { return plan.name; }));
 
-  gui->addElement({"Walking", "Swing"}, ComboInput("Type", {"CubicSplineSimple", "DefaultSwingFoot", "LandingSearch"},
-              [this]() { return swingTrajType; },
-              [this](const std::string & v) { swingTrajType = v; }));
+  gui->addElement({"Walking", "Swing"},
+                  ComboInput(
+                      "Type", {"CubicSplineSimple", "DefaultSwingFoot", "LandingSearch"},
+                      [this]() { return swingTrajType; }, [this](const std::string & v) { swingTrajType = v; }));
 
   gui->addElement({"Walking", "Swing"}, Label("Plan name", [this]() { return plan.name; }));
 
-  gui->addElement(
-      {"Walking", "Swing", "DefaultSwingFoot"},
-          NumberInput(
-              "Swing height [m]", [this]() { return plan.swingHeight(); },
-              [this](double height) { plan.swingHeight(height); }),
-          NumberInput(
-              "Takeoff duration [s]", [this]() { return plan.takeoffDuration(); },
-              [this](double duration) { plan.takeoffDuration(duration); }),
-          NumberInput(
-              "Takeoff pitch [rad]", [this]() { return plan.takeoffPitch(); },
-              [this](double pitch) { plan.takeoffPitch(pitch); }),
-          NumberInput(
-              "Landing duration [s]", [this]() { return plan.landingDuration(); },
-              [this](double duration) { plan.landingDuration(duration); }),
-          NumberInput(
-              "Landing pitch [rad]", [this]() { return plan.landingPitch(); },
-              [this](double pitch) { plan.landingPitch(pitch); }));
-
+  gui->addElement({"Walking", "Swing", "DefaultSwingFoot"},
+                  NumberInput(
+                      "Swing height [m]", [this]() { return plan.swingHeight(); },
+                      [this](double height) { plan.swingHeight(height); }),
+                  NumberInput(
+                      "Takeoff duration [s]", [this]() { return plan.takeoffDuration(); },
+                      [this](double duration) { plan.takeoffDuration(duration); }),
+                  NumberInput(
+                      "Takeoff pitch [rad]", [this]() { return plan.takeoffPitch(); },
+                      [this](double pitch) { plan.takeoffPitch(pitch); }),
+                  NumberInput(
+                      "Landing duration [s]", [this]() { return plan.landingDuration(); },
+                      [this](double duration) { plan.landingDuration(duration); }),
+                  NumberInput(
+                      "Landing pitch [rad]", [this]() { return plan.landingPitch(); },
+                      [this](double pitch) { plan.landingPitch(pitch); }));
 
   BWC::SwingTrajCubicSplineSimple::addConfigToGUI(*gui, {"Walking", "Swing", "CubicSplineSimple"});
   BWC::SwingTrajLandingSearch::addConfigToGUI(*gui, {"Walking", "Swing", "LandingSearch"});
@@ -338,6 +189,146 @@ void Controller::addGUIElements(std::shared_ptr<mc_rtc::gui::StateBuilder> gui)
 
 void Controller::reset(const mc_control::ControllerResetData & data)
 {
+  auto robotConfig = config()("robot_models")(controlRobot().name());
+  auto planConfig = config()("plans")(controlRobot().name());
+  if(planConfig.has("external"))
+  {
+    externalFootstepPlanner.configure(planConfig("external"));
+  }
+
+  mc_rtc::log::info("Loading default stabilizer configuration");
+  defaultStabilizerConfig_ = robot().module().defaultLIPMStabilizerConfiguration();
+  if(robotConfig.has("stabilizer"))
+  {
+    mc_rtc::log::info("Loading additional stabilizer configuration");
+    defaultStabilizerConfig_.load(robotConfig("stabilizer"));
+    // mc_rtc::log::info("Stabilizer Configuration:\n{}", defaultStabilizerConfig_.save().dump(true));
+  }
+
+  // Patch CoM height and step width in all plans
+  std::vector<std::string> plans = planConfig.keys();
+  double comHeight = defaultStabilizerConfig_.comHeight;
+  for(const auto & p : plans)
+  {
+    auto plan = planConfig(p);
+    if(!plan.has("com_height"))
+    {
+      plan.add("com_height", comHeight);
+    }
+  }
+
+  double postureStiffness = config()("tasks")("posture")("stiffness");
+  double postureWeight = config()("tasks")("posture")("weight");
+  postureTask = getPostureTask(robot().name());
+  postureTask->stiffness(postureStiffness);
+  postureTask->weight(postureWeight);
+
+  // Read sole properties from robot model and configuration file
+  sva::PTransformd X_0_lfc = controlRobot().surfacePose("LeftFootCenter");
+  sva::PTransformd X_0_rfc = controlRobot().surfacePose("RightFootCenter");
+  sva::PTransformd X_0_lf = controlRobot().surfacePose("LeftFoot");
+  sva::PTransformd X_lfc_lf = X_0_lf * X_0_lfc.inv();
+  sva::PTransformd X_rfc_lfc = X_0_lfc * X_0_rfc.inv();
+  double stepWidth = X_rfc_lfc.translation().y();
+  sole_ = robotConfig("sole");
+
+  // If an ankle offset is specified use it, otherwise compute it
+  if(robotConfig("sole").has("leftAnkleOffset"))
+  {
+    sole_.leftAnkleOffset = robotConfig("sole")("leftAnkleOffset");
+  }
+  else
+  {
+    sole_.leftAnkleOffset = X_lfc_lf.translation().head<2>();
+  }
+
+  // Configure MPC solver
+  mpcConfig_ = config()("mpc");
+  mpc_.sole(sole_);
+
+  // ====================
+  // Create Stabilizer
+  // - Default configuration from the robot module
+  // - Additional configuration from the configuration, in section robot_models/robot_name/stabilizer
+  // ====================
+  // clang-format off
+  stabilizer_.reset(
+    new mc_tasks::lipm_stabilizer::StabilizerTask(
+      solver().robots(),
+      solver().realRobots(),
+      robot().robotIndex(),
+      defaultStabilizerConfig_.leftFootSurface,
+      defaultStabilizerConfig_.rightFootSurface,
+      defaultStabilizerConfig_.torsoBodyName,
+      solver().dt()));
+  // clang-format on
+  stabilizer_->configure(defaultStabilizerConfig_);
+
+  // Read footstep plans from configuration
+  planInterpolator.configure(planConfig);
+  planInterpolator.stepWidth(stepWidth);
+  std::string initialPlan = planInterpolator.availablePlans()[0];
+  config()("initial_plan", initialPlan);
+  loadFootstepPlan(initialPlan);
+
+  // =========================
+  // Create Swing trajectory generator
+  // =========================
+  if(robotConfig.has("SwingTraj"))
+  {
+    if(robotConfig("SwingTraj").has("type"))
+    {
+      swingTrajType = static_cast<std::string>(robotConfig("SwingTraj")("type"));
+      for(const auto & key : robotConfig("SwingTraj").keys())
+      {
+        config_("SwingTraj")(swingTrajType).add(key, robotConfig("SwingTraj")(key));
+      }
+
+      mc_rtc::log::info("Loaded {} from {}:\n{}", swingTrajType, robot().name(),
+                        config_("SwingTraj")(swingTrajType).dump(true, true));
+
+      if(swingTrajType == "CubicSplineSimple")
+      {
+        BWC::SwingTrajCubicSplineSimple::loadDefaultConfig(
+            config_("SwingTraj")("CubicSplineSimple", config_("SwingTraj")(swingTrajType)));
+      }
+      else if(swingTrajType == "LandingSearch")
+      {
+        BWC::SwingTrajLandingSearch::loadDefaultConfig(
+            config_("SwingTraj")("LandingSearch", config_("SwingTraj")(swingTrajType)));
+      }
+    }
+    else
+    {
+      mc_rtc::log::error("You did not define the type");
+    }
+  }
+  mc_rtc::log::info("The chosen swing trajectory type is '{}'", swingTrajType);
+
+  // =========================
+  // Create Swing foot tasks
+  // =========================
+  double swingWeight = 1000;
+  double swingStiffness = 500;
+  if(robotConfig.has("swingfoot"))
+  {
+    robotConfig("swingfoot")("weight", swingWeight);
+    robotConfig("swingfoot")("stiffness", swingStiffness);
+  }
+  swingFootTaskRight_.reset(new mc_tasks::SurfaceTransformTask("RightFootCenter", robots(), robots().robotIndex(),
+                                                               swingWeight, swingStiffness));
+  swingFootTaskLeft_.reset(new mc_tasks::SurfaceTransformTask("LeftFootCenter", robots(), robots().robotIndex(),
+                                                              swingWeight, swingStiffness));
+
+  addLogEntries(logger());
+  mpc_.addLogEntries(logger());
+
+  if(gui_)
+  {
+    addGUIElements(gui_);
+    mpc_.addGUIElements(gui_);
+  }
+
   config()("observerPipelineName", observerPipelineName_);
   if(!hasObserverPipeline(observerPipelineName_))
   {
@@ -346,6 +337,8 @@ void Controller::reset(const mc_control::ControllerResetData & data)
   }
 
   mc_control::fsm::Controller::reset(data);
+
+  halfSitPose = controlRobot().mbc().q;
 
   stabilizer_->reset();
   setContacts({{ContactState::Left, supportContact().pose}, {ContactState::Right, targetContact().pose}}, true);
