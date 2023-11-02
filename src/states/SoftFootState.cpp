@@ -1604,6 +1604,10 @@ void SoftFootState::updateFootSwingPose(mc_control::fsm::Controller & ctl, const
     desired_angle = 0.;
   }
   double desired_offset_position_x = foot_data_[current_moving_foot].position_offset_x;
+  if(desired_angle > -0.05)
+  {
+    desired_offset_position_x += 0.025;
+  }
   if(desired_angle > 0.05)
   {
     desired_offset_position_x += 0.015;
@@ -1612,15 +1616,18 @@ void SoftFootState::updateFootSwingPose(mc_control::fsm::Controller & ctl, const
   {
     desired_offset_position_x = 0.;
   }
-  double desired_offset_position_z = foot_data_[current_moving_foot].position_offset_z * 1.15 + 0.0;
-  if(desired_angle > 0.05)
-  {
-    desired_offset_position_z = desired_offset_position_z * 1.30 + 0.015;
-  }
-  if(!with_foot_adjustment_ && !with_ankle_rotation_)
-  {
-    desired_offset_position_z = 0.;
-  }
+  // double desired_offset_position_z = foot_data_[current_moving_foot].position_offset_z * 1.15 + 0.0;
+  double desired_offset_position_z = -0.005;
+
+  // if(desired_angle > 0.05)
+  // {
+  //   // desired_offset_position_z = desired_offset_position_z * 1.30 + 0.015;
+  //   desired_offset_position_z = desired_offset_position_z * 1.30 + 0.01;
+  // }
+  // if(!with_foot_adjustment_ && !with_ankle_rotation_)
+  // {
+  //   desired_offset_position_z = 0.;
+  // }
 
   mc_rtc::log::info("[SoftFootState] position_offset_x for landing {}", desired_offset_position_x);
   mc_rtc::log::info("[SoftFootState] position_offset_z for landing {}", desired_offset_position_z);

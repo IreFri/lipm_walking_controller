@@ -6,7 +6,7 @@ SwingTraj:
     withdrawOffset: [0, 0, 0.035] # [m]
     approachDurationRatio: 0.25
     approachOffset: [0, 0, 0.035] # [m]
-    swingOffset: [0, 0, 0.06] # [m]
+    swingOffset: [0, 0, 0.1] # [m] [0, 0, 0.06] 
   LandingSearch:
     withdrawDurationRatio: 0.2
     withdrawOffset: [0, 0, 0.04] # [m]
@@ -83,9 +83,9 @@ robot_models:
     stabilizer:
       dcm_tracking:
         gains:
-          prop: 4
-          integral: 5
-          deriv: 0.2
+          prop: 3 # 4
+          integral: 0 # 5
+          deriv: 0 # 0.2
       admittance:
         cop: [0.03, 0.04]
         maxVel:
@@ -649,7 +649,7 @@ plans:
       double_support_duration: 0.6
       single_support_duration: 1.5
       step_length: 0.15
-      swing_height: 0.12
+      swing_height: 0.08
       torso_pitch: -0.1
       # swing_height: 0.04 #LIPM
       # com_height: 0.817301
