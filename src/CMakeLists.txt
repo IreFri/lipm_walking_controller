@@ -94,7 +94,9 @@ add_executable(CameraSensorResetShm observer/CameraSensorResetShm.cpp)
 target_link_libraries(CameraSensorResetShm PUBLIC CameraSensorShared)
 
 add_executable(CameraSensorServer observer/CameraSensorServer.cpp)
-target_link_libraries(CameraSensorServer PUBLIC CameraSensorShared Open3D::Open3D ceres ${realsense2_LIBRARY})
+target_include_directories(CameraSensorServer PUBLIC "${cv_bridge_INCLUDE_DIRS}" "${sensor_msgs_INCLUDE_DIRS}" "${OpenCV_INCLUDE_DIRS}")
+target_link_libraries(CameraSensorServer PUBLIC CameraSensorShared Open3D::Open3D ceres ${realsense2_LIBRARY}
+  image_transport cv_bridge mc_rtc::mc_rtc_ros "${OpenCV_LIBS}")
 
 install(TARGETS CameraSensorResetShm CameraSensorServer DESTINATION bin)
 
