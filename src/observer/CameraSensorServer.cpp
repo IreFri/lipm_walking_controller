@@ -3,7 +3,6 @@
 #include "CameraSensorCeresFunctions.h"
 
 // Include RealSense Cross Platform API
-#include <librealsense2/rs.hpp>
 #include <librealsense2/rs_advanced_mode.hpp>
 
 #include <fstream>
@@ -12,10 +11,14 @@
 #include <signal.h>
 #include <unistd.h>
 
+#include <sensor_msgs/Image.h>
+#include <opencv2/opencv.hpp>
+
 namespace lipm_walking
 {
 
 CameraSensorServer::CameraSensorServer(const char * name, const mc_rtc::Configuration & config)
+: it_(*mc_rtc::ROSBridge::get_node_handle())
 {
   name_ = name;
   data_ = CameraSensorShared::get(name);
@@ -63,6 +66,9 @@ CameraSensorServer::CameraSensorServer(const char * name, const mc_rtc::Configur
   {
     path_to_replay_data_ = static_cast<std::string>(config("path_to_replay_data"));
   }
+
+  image_pub_ = it_.advertise("/camera/" + name_, 1);
+
   mc_rtc::log::info("[CameraSensorServer::{}] 'camera_serial' is {}", name_, camera_serial_);
   mc_rtc::log::info("[CameraSensorServer::{}] 'path_to_preset' is {}", name_, path_to_preset_);
   mc_rtc::log::info("[CameraSensorServer::{}] 'kernel_size' is {}", name_, kernel_size_);
@@ -226,6 +232,38 @@ void CameraSensorServer::acquisition()
     if(data_->client.isAlive())
     {
       data_->data_ready->notify_all();
+    }
+
+    // Publish in ROS
+    {
+      // Allocate the image
+      if(image_colorized_depth_.size() != cv::Size(width, height))
+      {
+        image_colorized_depth_ = cv::Mat(height, width, CV_8UC3);
+      }
+
+      image_colorized_depth_.data = (uint8_t*)color_map_.process(frame).get_data();
+
+      // if (frame.is<rs2::depth_frame>())
+      // {
+      //     image = fix_depth_scale(image, _depth_scaled_image[stream]);
+      // }
+      sensor_msgs::Image img_msg;
+
+      // Convert the CV::Mat into a ROS image message (1 copy is done here)
+      cv_bridge::CvImage(std_msgs::Header(), sensor_msgs::image_encodings::RGB8 , image_colorized_depth_).toImageMsg(img_msg);
+
+      // Convert OpenCV Mat to ROS Image
+      img_msg.header.frame_id = "/camera/"+name_;
+      img_msg.height = height;
+      img_msg.width = width;
+      img_msg.is_bigendian = false;
+      img_msg.step = width * image_colorized_depth_.elemSize();
+
+      // Transfer the unique pointer ownership to the RMW
+      image_pub_.publish(img_msg);
+
+      ros::spinOnce();
     }
   }
 }
@@ -723,8 +761,8 @@ void CameraSensorServer::do_computation()
     if(duration_computation.count() / 1000. > 33.0)
     {
       mc_rtc::log::error("Timeout");
-      data_->result_ready->notify_all();
-      return;
+      // data_->result_ready->notify_all();
+      // return;
     }
   }
 
@@ -743,8 +781,8 @@ void CameraSensorServer::do_computation()
     if(duration_computation.count() / 1000. > 33.0)
     {
       mc_rtc::log::error("Timeout");
-      data_->result_ready->notify_all();
-      return;
+      // data_->result_ready->notify_all();
+      // return;
     }
   }
 
@@ -761,7 +799,7 @@ void CameraSensorServer::do_computation()
 
     new_ground_points_ = pre_new_ground_points_;
 
-    std::array<double, 3> threshold_degrees = {45., 15., 15.};
+    std::array<double, 3> threshold_degrees = {45., 15., 5.};
     std::array<double, 3> threshold_z = {0.05, 0.01, 0.002};
 
     bool is_success = false;
@@ -818,7 +856,7 @@ void CameraSensorServer::do_computation()
     std::vector<Eigen::Vector3d> src_obstacles = selectObstacles(new_ground_points_, true);
     std::vector<Eigen::Vector3d> target_obstacles = selectObstacles(target->points_);
 
-    if(!src_obstacles.empty() && !target_obstacles.empty())
+    if(src_obstacles.size() > 5 && target_obstacles.size() > 5)
     {
       double t_x = 0.;
       ceres::Problem problem;
@@ -890,6 +928,24 @@ void CameraSensorServer::do_computation()
     {
       ++ idx_start;
     }
+
+    size_t size = std::min(size_t(20), live_ground_points_.front().size());
+    if(idx_start + size < historic_points_.size())
+    {
+      double sum_diff = 0.;
+      for(size_t i = 0; i < size; ++i)
+      {
+        sum_diff += std::abs((historic_points_.begin() + idx_start + i)->z() - live_ground_points_.front()[i].z());
+      }
+      sum_diff /= static_cast<double>(size);
+
+      if(sum_diff > 0.005)
+      {
+        idx_start += 20;
+        idx_start = std::min(idx_start, historic_points_.size());
+      }
+    }
+
     historic_points_.erase(historic_points_.begin() + idx_start, historic_points_.end());
     for(const auto & points: live_ground_points_)
     {
@@ -931,13 +987,13 @@ void CameraSensorServer::do_computation()
 } // namespace lipm_walking
 
 std::mutex cv_mtx;
-std::condition_variable cv;
+std::condition_variable condv;
 std::atomic<bool> stop_program{false};
 
 void signal_callback_handler(int)
 {
   stop_program = true;
-  cv.notify_all();
+  condv.notify_all();
 }
 
 int main(int argc, char * argv[])
@@ -982,7 +1038,7 @@ int main(int argc, char * argv[])
   server.run();
   signal(SIGINT, signal_callback_handler);
   std::unique_lock<std::mutex> lck(cv_mtx);
-  cv.wait(lck, []() { return stop_program.load(); });
+  condv.wait(lck, []() { return stop_program.load(); });
   server.stop();
   return 0;
 }

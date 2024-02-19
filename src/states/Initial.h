@@ -93,6 +93,8 @@ private:
   bool postureTaskWasActive_; /**< Was the posture task active at previous run()? */
   bool startStandingButton_; /**< Is the "Start standing" button displayed in the GUI? */
   bool startStanding_; /**< Has the user clicked on "Start standing"? */
+  bool delayStartStanding_;
+  int delayStartStandingCounter_;
 
   /// @{ config
   bool resetFloatingBaseToPlan_ = true;

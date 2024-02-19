@@ -56,7 +56,7 @@ struct PlanInterpolator
   static constexpr double DEFAULT_EXTRA_STEP_WIDTH = 0.; // [m]
   static constexpr double IN_PLACE_EXTRA_STEP_WIDTH = 0.02; // [m]
   static constexpr double IN_PLACE_MAX_STEP_ANGLE = 45.; // [deg]
-  static constexpr double MAX_EXTRA_STEP_WIDTH = 0.05; // [m]
+  static constexpr double MAX_EXTRA_STEP_WIDTH = 0.15; // [m]
   static constexpr double MAX_LATERAL_STEP_LENGTH = 0.2; // [m]
   static constexpr double MAX_SAGITTAL_STEP_LENGTH = 0.4; // [m]
   static constexpr double MIN_STEP_LENGTH = 0.001; // [m]
@@ -342,7 +342,7 @@ private:
   SE2d lastBackwardTarget_ = {-0.5, 0., 0.}; /**< Last target for a custom_backward plan */
   SE2d lastForwardTarget_ = {0.5, 0., 0.}; /**< Last target for a custom_forward plan */
   SE2d lastLateralTarget_ = {0.0, 0.3, 0.}; /**< Last target for a custom_lateral plan */
-  SE2d targetPose_ = {13.1, 0., 0.}; /**< Target SE2 transform in the horizontal plane {0.5, 0., 0.};*/ 
+  SE2d targetPose_ = {2.2, 0., 0.}; /**< Target SE2 transform in the horizontal plane {0.5, 0., 0.};*/
   bool startWithRightFootstep_ = true;
   double desiredStepAngle_ = 10. * M_PI / 180.; // [rad]
   double desiredStepLength_ = 0.2; // [m]

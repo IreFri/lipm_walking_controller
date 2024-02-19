@@ -303,11 +303,11 @@ void SoftFootState::runState()
   }
   else if(current_moving_foot == Foot::Left)
   {
-    current_state_ = "LeftSwing";
+    current_state_ = "Swing";
   }
   else if(current_moving_foot == Foot::Right)
   {
-    current_state_ = "RightSwing";
+    current_state_ = "Swing";
   }
 
 
@@ -348,7 +348,7 @@ void SoftFootState::runState()
         {
           std::vector<double> d;
           std::transform(ground_segment_[foot].filtered.begin(), ground_segment_[foot].filtered.end(), std::back_inserter(d),
-            [](const Eigen::Vector3d & v) { return v.y(); });
+            [](const Eigen::Vector3d & v) { return v.z(); });
           return d;
         });
       ctl.logger().addLogEntry("MyMeasures_" + name + "_convex_x", [this, foot]()
@@ -362,7 +362,7 @@ void SoftFootState::runState()
         {
           std::vector<double> d;
           std::transform(ground_segment_[foot].convex.begin(), ground_segment_[foot].convex.end(), std::back_inserter(d),
-            [](const Eigen::Vector3d & v) { return v.y(); });
+            [](const Eigen::Vector3d & v) { return v.z(); });
           return d;
         });
       for(const auto & range_sensor_name: range_sensor_names_[foot])
@@ -427,7 +427,8 @@ void SoftFootState::runState()
   const bool enough_ground_in_front = ground.back().x() >= X_0_landing.translation().x() + landing_to_foot_middle_offset_ + foot_length_ * 0.55 + extra_to_compute_best_position_;
   const bool enough_ground_in_back = ground.front().x() <= X_0_landing.translation().x() + landing_to_foot_middle_offset_ - foot_length_ * 0.55 - extra_to_compute_best_position_;
 
-  if(!foot_data_[current_moving_foot].computation_done && enough_ground_in_front && enough_ground_in_back)
+  if(!foot_data_[current_moving_foot].computation_done && enough_ground_in_front && enough_ground_in_back
+     && ctl.swingTraj->t_ > ctl.swingTraj->startTime_ + (ctl.swingTraj->endTime_ - ctl.swingTraj->startTime_) * 0.5)
   {
     mc_rtc::log::success("Accumulated enough data for {}", current_moving_foot == Foot::Right ? "right foot" : "left foot");
     // We need to do these steps only one time
@@ -784,7 +785,7 @@ void SoftFootState::extractGroundSegment(mc_control::fsm::Controller & ctl, cons
     [&](const Eigen::Vector3d & v) { return v.x() >= landing.x() + landing_to_foot_middle_offset_ + foot_length_ * 0.5 + extra_to_compute_best_position_; });
 
   // Save the selected segment in raw data of ground segment structure
-  // ground_segment_[current_moving_foot].raw.clear();
+  ground_segment_[current_moving_foot].raw.clear();
   std::vector<Eigen::Vector3d> raw;
   std::transform(begin_iterator, end_iterator, std::back_inserter(raw), [](const Eigen::Vector3d & v) { return v; });
 
@@ -1127,6 +1128,11 @@ void SoftFootState::computeFootLandingPosition(const Foot & current_moving_foot,
     const auto start_convex_iterator = std::find_if(convex.begin(), convex.end(), [&](const Eigen::Vector3d & v) { return v.x() >= start.x(); });
     const auto end_convex_iterator = std::find_if(convex.begin(), convex.end(), [&](const Eigen::Vector3d & v) { return v.x() >= end.x(); });
 
+    if(start_convex_iterator == convex.begin() || end_convex_iterator == convex.end())
+    {
+      return 0.;
+    }
+
     const Eigen::Vector3d & p_0 = *start_convex_iterator;
     const Eigen::Vector3d & p_1 = *end_convex_iterator;
 
@@ -1178,7 +1184,8 @@ void SoftFootState::computeFootLandingPosition(const Foot & current_moving_foot,
 
   //
   auto computeSide = [&](int start, int end, double direction, const Eigen::Vector3d & phalanx_pos,
-    double theta, std::vector<double>& ret_phalanxes_theta, std::vector<Eigen::Vector2d>& ret_contact_points) -> std::vector<Eigen::Vector3d>
+    double theta, std::vector<double>& ret_phalanxes_theta, std::vector<Eigen::Vector2d>& ret_contact_points,
+    bool switch_direction = false) -> std::vector<Eigen::Vector3d>
   {
     std::vector<Eigen::Vector3d> ret;
     if(start == end)
@@ -1195,6 +1202,11 @@ void SoftFootState::computeFootLandingPosition(const Foot & current_moving_foot,
       phalanx_pos.z() + direction * (0.5 * phalanx_length_) * std::sin(theta)
     );
 
+    if(switch_direction)
+    {
+      direction = -direction;
+    }
+
     // std::cout << "phalanx_pos_side " << next_phalanx_side_pos.transpose() << std::endl;
 
     // Create linspace of theta to evaluate using the foot_data_[current_moving_foot].min_max_phalanxes_angle
@@ -1207,7 +1219,15 @@ void SoftFootState::computeFootLandingPosition(const Foot & current_moving_foot,
     std::cout << "start_theta " << start_theta << " end_theta " << end_theta << " - " << static_cast<int>(min_max_phalanxes_angle * 180. / M_PI) << std::endl;
     const std::vector<double> evaluated_thetas = linspace(start_theta, end_theta, static_cast<int>(min_max_phalanxes_angle * 180. / M_PI)); // [rad]
     //
-    const std::vector<int> phalanx_idxs = linspace(start, end, std::abs(end - start) + 1);
+    std::vector<int> phalanx_idxs;
+    if(end > 2)
+    {
+      phalanx_idxs = linspace(start, end, std::abs(end - start) + 1);
+    }
+    else
+    {
+      phalanx_idxs = {0};
+    }
     for(const auto& phalanx_i: phalanx_idxs)
     {
       double theta_intersection = 0.;
@@ -1327,50 +1347,24 @@ void SoftFootState::computeFootLandingPosition(const Foot & current_moving_foot,
     size_t n_phalanx = whichPhalanxItIs(landing_pos.translation(), highest_point_on_convex);
     // Keep highest altitude
     foot_data_[current_moving_foot].position_offset_z = std::max(foot_data_[current_moving_foot].position_offset_z, highest_point_on_convex.z());
-    // {
-    //   auto convex_iterator = std::find_if(convex.begin(), convex.end(), [&](const Eigen::Vector3d & v) { return v.x() >= landing_pos.translation().x(); });
-
-    //   const Eigen::Vector3d & p_1 = *convex_iterator;
-    //   foot_data_[current_moving_foot].position_offset_z = p_1.z();
-    // }
-    mc_rtc::log::warning("[SoftFootState] computeFootLandingPosition position_offset_z {}", foot_data_[current_moving_foot].position_offset_z);
-    mc_rtc::log::warning("[SoftFootState] computeFootLandingPosition highest_point_on_convex {}", highest_point_on_convex.z());
-    // std::cout << "The n-th phalanx is " <<  n_phalanx << std::endl;
-    // phalanx_pos is the middle of the phalanx
-    const Eigen::Vector3d phalanx_pos_start = (sva::PTransformd(Eigen::Vector3d(-foot_length_ * 0.5 + landing_to_foot_middle_offset_ + n_phalanx * phalanx_length_, 0., 0.)) * landing_pos).translation();
-    const Eigen::Vector3d phalanx_pos_end = (sva::PTransformd(Eigen::Vector3d(-foot_length_ * 0.5 + landing_to_foot_middle_offset_ + (n_phalanx + 1) * phalanx_length_, 0., 0.)) * landing_pos).translation();
-
-    std::cout << phalanx_pos_start.x() << " " << phalanx_pos_end.x() << std::endl;
-    // Compute landing theta at this point for the n-th phalanx
-    const double theta = computeThetaBasedOnQhull(phalanx_pos_start, phalanx_pos_end);
-    // std::cout << "theta " << theta << std::endl;
-    // std::cout << highest_point_on_convex.transpose() << std::endl;
 
     // std::cout << "min_x_foot " << min_x_foot << " max_x_foot " << max_x_foot << std::endl;
     Eigen::Vector3d phalanx_pos = (sva::PTransformd(Eigen::Vector3d(-foot_length_ * 0.5 + landing_to_foot_middle_offset_ + (n_phalanx + 0.5) * phalanx_length_, 0., 0.)) * landing_pos).translation();
     phalanx_pos.z() = highest_point_on_convex.z();
-    // std::cout << "phalanx_pos " << phalanx_pos.transpose() << std::endl;
-    // std::cout << "start phalanx " << min_x_foot + phalanx_length_ * n_phalanx << std::endl;
 
-    const Eigen::Vector3d phalanx_pos_left(
-      phalanx_pos.x() - (0.5 * phalanx_length_) * std::cos(theta),
-      phalanx_pos.y(),
-      phalanx_pos.z() - (0.5 * phalanx_length_) * std::sin(theta)
-    );
-    const Eigen::Vector3d phalanx_pos_right(
-      phalanx_pos.x() + (0.5 * phalanx_length_) * std::cos(theta),
-      phalanx_pos.y(),
-      phalanx_pos.z() + (0.5 * phalanx_length_) * std::sin(theta)
-    );
+    mc_rtc::log::warning("[SoftFootState] computeFootLandingPosition position_offset_z {}", foot_data_[current_moving_foot].position_offset_z);
+    mc_rtc::log::warning("[SoftFootState] computeFootLandingPosition highest_point_on_convex {}", highest_point_on_convex.z());
 
     // std::cout << "phalanx_pos_left " << phalanx_pos_left.transpose() << std::endl;
     // std::cout << "phalanx_pos_right " << phalanx_pos_right.transpose() << std::endl;
 
     // std::cout << "n_phalanx " << n_phalanx << " nr_phalanxes_ " << nr_phalanxes_ << std::endl;
+    Eigen::Vector3d phalanx_pos_right;
     std::vector<double> right_side_phalanxes_theta;
     std::vector<Eigen::Vector2d> right_contact_points;
     std::vector<Eigen::Vector3d> right_side_phalanxes_pos;
 
+    Eigen::Vector3d phalanx_pos_left;
     std::vector<double> left_side_phalanxes_theta;
     std::vector<Eigen::Vector2d> left_contact_points;
     std::vector<Eigen::Vector3d> left_side_phalanxes_pos;
@@ -1379,6 +1373,29 @@ void SoftFootState::computeFootLandingPosition(const Foot & current_moving_foot,
 
     if(nr_phalanxes_ > 2)
     {
+      // std::cout << "The n-th phalanx is " <<  n_phalanx << std::endl;
+      // phalanx_pos is the middle of the phalanx
+      const Eigen::Vector3d phalanx_pos_start = (sva::PTransformd(Eigen::Vector3d(-foot_length_ * 0.5 + landing_to_foot_middle_offset_ + n_phalanx * phalanx_length_, 0., 0.)) * landing_pos).translation();
+      const Eigen::Vector3d phalanx_pos_end = (sva::PTransformd(Eigen::Vector3d(-foot_length_ * 0.5 + landing_to_foot_middle_offset_ + (n_phalanx + 1) * phalanx_length_, 0., 0.)) * landing_pos).translation();
+
+      // Compute landing theta at this point for the n-th phalanx
+      const double theta = computeThetaBasedOnQhull(phalanx_pos_start, phalanx_pos_end);
+      // std::cout << "theta " << theta << std::endl;
+      // std::cout << highest_point_on_convex.transpose() << std::endl;
+      // std::cout << "phalanx_pos " << phalanx_pos.transpose() << std::endl;
+      // std::cout << "start phalanx " << min_x_foot + phalanx_length_ * n_phalanx << std::endl;
+
+      phalanx_pos_left = Eigen::Vector3d(
+        phalanx_pos.x() - (0.5 * phalanx_length_) * std::cos(theta),
+        phalanx_pos.y(),
+        phalanx_pos.z() - (0.5 * phalanx_length_) * std::sin(theta)
+      );
+      phalanx_pos_right = Eigen::Vector3d(
+        phalanx_pos.x() + (0.5 * phalanx_length_) * std::cos(theta),
+        phalanx_pos.y(),
+        phalanx_pos.z() + (0.5 * phalanx_length_) * std::sin(theta)
+      );
+
       // Compute right part
       // std::cout << "Right side" << std::endl;
       right_side_phalanxes_pos = computeSide(n_phalanx, nr_phalanxes_, +1., phalanx_pos, theta, right_side_phalanxes_theta, right_contact_points);
@@ -1402,76 +1419,37 @@ void SoftFootState::computeFootLandingPosition(const Foot & current_moving_foot,
     }
     else
     {
-      // To check if the intersection belongs to the segment we are evaluating
-      auto isPointOnSegment = [](const Eigen::Vector2d& A, const Eigen::Vector2d& B, const Eigen::Vector2d& C) -> bool
+      // std::cout << "The n-th phalanx is " <<  n_phalanx << std::endl;
+      // phalanx_pos is the middle of the phalanx
+      const Eigen::Vector3d phalanx_pos_start = (sva::PTransformd(Eigen::Vector3d(-foot_length_ * 0.5 + landing_to_foot_middle_offset_ + n_phalanx * phalanx_length_, 0., 0.)) * landing_pos).translation();
+      const Eigen::Vector3d phalanx_pos_end = (sva::PTransformd(Eigen::Vector3d(-foot_length_ * 0.5 + landing_to_foot_middle_offset_ + (n_phalanx + 1) * phalanx_length_, 0., 0.)) * landing_pos).translation();
+
+      // Compute landing theta at this point for the n-th phalanx
+      const double theta = 0.;
+
+      // double theta = 0.;
+
+      phalanx_pos_left = Eigen::Vector3d(
+        phalanx_pos.x() - (0.5 * phalanx_length_) * std::cos(theta),
+        phalanx_pos.y(),
+        phalanx_pos.z() - (0.5 * phalanx_length_) * std::sin(theta)
+      );
+      phalanx_pos_right = Eigen::Vector3d(
+        phalanx_pos.x() + (0.5 * phalanx_length_) * std::cos(theta),
+        phalanx_pos.y(),
+        phalanx_pos.z() + (0.5 * phalanx_length_) * std::sin(theta)
+      );
+
+      if(std::abs(highest_point_on_convex.x() - phalanx_pos_right.x()) > std::abs(highest_point_on_convex.x() - phalanx_pos_left.x()))
       {
-        const Eigen::Vector2d AB = B - A;
-        const Eigen::Vector2d AC = C - A;
-
-        // Check the they are collinear
-        if(std::abs(AB.x() * AC.y() - AC.x() * AB.y()) < 1e-3)
-        {
-          // Check if C is in between A and B
-          const double dot_AB = AB.dot(AB);
-          const double dot_AC = AB.dot(AC);
-
-          // // std::cout << "dot_AB " << dot_AB << " dot_AC " << dot_AC << std::endl;
-          if (dot_AC == 0. || dot_AC == dot_AB || (dot_AC > 0. && dot_AC < dot_AB))
-          {
-            // // std::cout << "Point on segment" << A.transpose() << " " << B.transpose() << " " << C.transpose() << std::endl;
-            return true;
-          }
-        }
-        return false;
-      };
-
-      const std::vector<Eigen::Vector3d> & ground = ground_segment_[current_moving_foot].filtered;
-      std::vector<Eigen::Vector3d> ground_under_phalanx;
-      const auto begin_iterator = std::find_if(ground.begin(), ground.end(),
-        [&](const Eigen::Vector3d & v) { return v.x() >= phalanx_pos_left.x(); });
-      const auto end_iterator = std::find_if(ground.begin(), ground.end(),
-        [&](const Eigen::Vector3d & v) { return v.x() >= phalanx_pos_right.x(); });
-      std::transform(begin_iterator, end_iterator, std::back_inserter(ground_under_phalanx), [](const Eigen::Vector3d & v) { return v; });
-
-      // const std::array<double, 2> start = {phalanx_pos_left.x(), phalanx_pos_left.z()};
-      // const std::array<double, 2> end = {phalanx_pos_right.x(), phalanx_pos_right.z()};
-
-      const Eigen::Vector2d start(phalanx_pos_left.x(), phalanx_pos_left.z());
-      const Eigen::Vector2d end(phalanx_pos_right.x(), phalanx_pos_right.z());
-
-      // Compute line equation
-      const double slope = (end.y() - start.y()) / (end.x() - start.x());
-      const double intercept = end.y() - slope * end.x();
-
-      auto f = [slope, intercept](double x) -> double
-      {
-        return slope * x + intercept;
-      };
-
-      std::vector<Eigen::Vector2d> contact_points;
-      // Compute points for line that matches
-      if(!ground_under_phalanx.empty())
-      {
-        double previous_diff_y = f(ground_under_phalanx[0].x()) - ground_under_phalanx[0].z();
-        for(size_t i = 1; i < ground_under_phalanx.size(); ++i)
-        {
-          const double line_y = f(ground_under_phalanx[i].x());
-          const double diff_y = line_y - ground_under_phalanx[i].z();
-          // We check if it is a possible 0
-          if(previous_diff_y * diff_y <= 0.)
-          {
-            // Check if the point is on the segment
-            Eigen::Vector2d output(ground_under_phalanx[i].x(), ground_under_phalanx[i].z());
-            if(isPointOnSegment(start, end, output))
-            {
-              contact_points.push_back(output);
-            }
-          }
-          previous_diff_y = diff_y;
-        }
+        distance_between_phalanxes = std::abs(highest_point_on_convex.x() - phalanx_pos_right.x());
       }
-      // std::cout << "nr contact points found " << contact_points.size() << std::endl;
-      // distance_between_phalanxes = TODO do something here to compute something
+      else
+      {
+        distance_between_phalanxes = std::abs(highest_point_on_convex.x() - phalanx_pos_left.x());
+      }
+
+      std::cout << "distance_between_phalanxes " << distance_between_phalanxes << std::endl;
     }
 
     if(foot_data_[current_moving_foot].phalanxes.empty() || distance_between_phalanxes > maximized_distance_between_phalanxes)
@@ -1626,21 +1604,40 @@ void SoftFootState::updateFootSwingPose(mc_control::fsm::Controller & ctl, const
 {
   auto & ctrl = controller();
   // Get the angle
-  double desired_angle = foot_data_[current_moving_foot].angle;
+  double desired_angle = foot_data_[current_moving_foot].angle * 1.05;
+  if(desired_angle > 0.05)
+  {
+    desired_angle *= 1.25;
+  }
   if(!with_ankle_rotation_)
   {
     desired_angle = 0.;
   }
   double desired_offset_position_x = foot_data_[current_moving_foot].position_offset_x;
+  if(desired_angle > -0.05)
+  {
+    desired_offset_position_x += 0.025;
+  }
+  if(desired_angle > 0.05)
+  {
+    desired_offset_position_x += 0.015;
+  }
   if(!with_foot_adjustment_)
   {
     desired_offset_position_x = 0.;
   }
-  double desired_offset_position_z = foot_data_[current_moving_foot].position_offset_z;
-  if(!with_foot_adjustment_ && !with_ankle_rotation_)
-  {
-    desired_offset_position_z = 0.;
-  }
+  // double desired_offset_position_z = foot_data_[current_moving_foot].position_offset_z * 1.15 + 0.0;
+  double desired_offset_position_z = -0.005;
+
+  // if(desired_angle > 0.05)
+  // {
+  //   // desired_offset_position_z = desired_offset_position_z * 1.30 + 0.015;
+  //   desired_offset_position_z = desired_offset_position_z * 1.30 + 0.01;
+  // }
+  // if(!with_foot_adjustment_ && !with_ankle_rotation_)
+  // {
+  //   desired_offset_position_z = 0.;
+  // }
 
   mc_rtc::log::info("[SoftFootState] position_offset_x for landing {}", desired_offset_position_x);
   mc_rtc::log::info("[SoftFootState] position_offset_z for landing {}", desired_offset_position_z);

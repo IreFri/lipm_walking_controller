@@ -55,6 +55,10 @@ add_project_dependency(Ceres REQUIRED)
 add_project_dependency(Open3D REQUIRED)
 find_package(realsense2 REQUIRED)
 add_project_dependency(mc_rtc REQUIRED)
+find_package(image_transport REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(OpenCV REQUIRED)
 if(NOT TARGET mc_rtc::mc_rtc_ros)
   message(
     FATAL_ERROR

@@ -51,6 +51,8 @@ void states::Standing::start()
 {
   auto & ctl = controller();
   ctl.startWalking = autoplay_;
+  delayStartWalking_ = autoplay_;
+  delayStartWalkingCounter_ = 0;
   ctl.walkingState = WalkingState::Standing;
   // Reset pendulum state starting from the current CoM state
   // This is done to ensure that there is no discontinuity when entering the
@@ -118,6 +120,8 @@ void states::Standing::start()
     if(plans.size() == 0)
     {
       ctl.startWalking = false;
+      delayStartWalking_ = false;
+      delayStartWalkingCounter_ = 0;
       ctl.config().add("autoplay", false);
     }
     else
@@ -156,7 +160,6 @@ void states::Standing::start()
     gui_.addElement({"Walking", "Main"},
                     Button(!controller().pauseWalking || (supportContact_.id == 0) ? "Start walking" : "Resume walking",
                            [this]() { startWalking(); }));
-
   }
 
   runState(); // don't wait till next cycle to update reference and tasks
@@ -200,6 +203,15 @@ void states::Standing::runState()
   pendulum.integrateIPM(zmp, lambda, ctl.timeStep);
   ctl.leftFootRatio(leftFootRatio_);
   ctl.stabilizer()->target(pendulum.com(), pendulum.comd(), pendulum.comdd(), pendulum.zmp());
+
+  if(delayStartWalking_ && delayStartWalkingCounter_ == 30 / ctl.solver().dt())
+  {
+    ctl.startWalking = true;
+  }
+  else if(delayStartWalking_)
+  {
+    ++delayStartWalkingCounter_;
+  }
 }
 
 void states::Standing::handleExternalPlan()
@@ -324,7 +336,7 @@ void states::Standing::startWalking()
     mc_rtc::log::error("No footstep in contact plan");
     return;
   }
-  ctl.startWalking = true;
+  delayStartWalking_ = true;
   ctl.nrFootsteps_ = 0;
   if(ctl.pauseWalking)
   {

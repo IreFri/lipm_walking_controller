@@ -8,6 +8,11 @@
 
 #include <thread>
 
+#include <mc_rtc/ros.h>
+#include <image_transport/image_transport.h>
+#include <cv_bridge/cv_bridge.h>
+#include <librealsense2/rs.hpp>
+
 namespace lipm_walking
 {
 
@@ -63,6 +68,12 @@ private:
   void computation();
 
   void do_computation();
+
+  // ROS part to publish the image
+  image_transport::ImageTransport it_;
+  image_transport::Publisher image_pub_;
+  rs2::colorizer color_map_;
+  cv::Mat image_colorized_depth_;
 };
 
 } // namespace lipm_walking
