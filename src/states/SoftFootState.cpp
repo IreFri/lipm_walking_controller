@@ -864,6 +864,16 @@ void SoftFootState::updateVariableStiffness(mc_control::fsm::Controller & ctl, c
 {
   variable_stiffness::connectionFile srv;
   srv.request.profile = foot_data_[current_moving_foot].altitude;
+  if (current_moving_foot == Foot::Left)
+  {
+    srv.request.WhichFoot = 0;
+  } 
+  else
+  {
+    srv.request.WhichFoot = 1;
+  }
+    
+
 
   if (client_.call(srv))
   {
