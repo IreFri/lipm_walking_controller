@@ -300,6 +300,7 @@ void SoftFootState::start()
 void SoftFootState::runState()
 {
   ros::spinOnce();
+  variable_stiffness::connectionFile srv;
 
   // Cast ctl to BaselineWalkingController
   auto & ctl = controller();
@@ -607,6 +608,16 @@ void SoftFootState::runState()
     // mc_rtc::log::warning("[SoftFootState] Accumulating data -> ground.back().x() {} {}", ground.back().x(),
     // X_0_landing.translation().x() + foot_length_ * 0.5 + extra_to_compute_best_position_);
   }
+
+  if(checkSingleSupportTime(0.9))
+  {
+    srv.request.valvesStatus = 0; // Close the solenoid
+  }
+  if(checkSingleSupportTime(0.05))
+  {
+    srv.request.valvesStatus = 1; // Open the solenoid
+  }
+
 }
 
 bool SoftFootState::checkTransitions()
@@ -977,10 +988,12 @@ void SoftFootState::extractAltitudeProfileFromGroundSegment(const Foot & current
                  [](const Eigen::Vector3d & v) { return v.z(); });
 }
 
-void SoftFootState::updateVariableStiffness(mc_control::fsm::Controller & ctl, const Foot & current_moving_foot)
+void SoftFootState::updateVariableStiffness(mc_control::fsm::Controller & ctl,
+                                        const Foot & current_moving_foot)
 {
   variable_stiffness::connectionFile srv;
   srv.request.profile = foot_data_[current_moving_foot].altitude;
+
   if(current_moving_foot == Foot::Left)
   {
     srv.request.WhichFoot = 0;
@@ -989,7 +1002,7 @@ void SoftFootState::updateVariableStiffness(mc_control::fsm::Controller & ctl, c
   {
     srv.request.WhichFoot = 1;
   }
-
+  
   if(client_.call(srv))
   {
     mc_rtc::log::success("[SoftFootState] We udpate the sole stiffness with {}", srv.response.stiffness);
