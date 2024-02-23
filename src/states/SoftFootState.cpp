@@ -140,6 +140,10 @@ void SoftFootState::start()
                         mc_rtc::gui::Label("PhalangesStiffness", [this]() { return this->PhalangesStiffness_; }));
   ctl.logger().addLogEntry("PhalangesStiffness", [this]() { return PhalangesStiffness_; });
 
+  ctl.gui()->addElement({"SoftFoot"},
+                        mc_rtc::gui::Label("Air_Pressure", [this]() { return this->pressure_; }));
+  ctl.logger().addLogEntry("Air_Pressure", [this]() { return pressure_; });
+
   for(const auto & range_sensor_name : range_sensor_names_[Foot::Right])
   {
     ctl.gui()->addElement(
@@ -283,6 +287,34 @@ void SoftFootState::start()
           "LeftGround", [this]() { return foot_data_[Foot::Left].last_ground.z(); }, mc_rtc::gui::Color::Red),
       mc_rtc::gui::plot::Y(
           "RightGround", [this]() { return foot_data_[Foot::Right].last_ground.z(); }, mc_rtc::gui::Color::Blue));
+
+  ctl.gui()->addPlot(
+      "Stiffness",
+      mc_rtc::gui::plot::X("t",
+                           [this, &ctl]()
+                           {
+                             static double t = 0.;
+                             return t += ctl.solver().dt();
+                           }),
+      mc_rtc::gui::plot::Y(
+          "SoleStiffness", [this]() { return this->PhalangesStiffness_; }, mc_rtc::gui::Color::Blue));
+
+
+  ctl.gui()->addPlot(
+      "Pressure",
+      mc_rtc::gui::plot::X("t",
+                           [this, &ctl]()
+                           {
+                             static double t = 0.;
+                             return t += ctl.solver().dt();
+                           }),
+      mc_rtc::gui::plot::Y(
+          "Pressure", [this]() { return this->pressure_; }, mc_rtc::gui::Color::Blue));
+
+
+
+
+
 
   //
   ctl.logger().addLogEntry("MyMeasures_continuous_ground_right",
@@ -1005,8 +1037,9 @@ void SoftFootState::updateVariableStiffness(mc_control::fsm::Controller & ctl,
   
   if(client_.call(srv))
   {
-    mc_rtc::log::success("[SoftFootState] We udpate the sole stiffness with {}", srv.response.stiffness);
+    mc_rtc::log::success("[SoftFootState] We udpate the sole stiffness with {}", srv.response.stiffness, srv.response.pressure);
     foot_data_[current_moving_foot].k = srv.response.stiffness;
+ 
     // Solution to modify the variable stiffness
     auto stiffnessToAngle = [this](double VarStiff)
     {
@@ -1022,6 +1055,7 @@ void SoftFootState::updateVariableStiffness(mc_control::fsm::Controller & ctl,
                             {tasks::qp::JointGains("R_VARSTIFF", 350), tasks::qp::JointGains("L_VARSTIFF", 350)});
     // Set computed stiffness for current moving foot
     PhalangesStiffness_ = foot_data_[current_moving_foot].k;
+    pressure_ = srv.response.pressure;
     postureTask->target({{variable_stiffness_jointname_[current_moving_foot],
                           std::vector<double>{stiffnessToAngle(foot_data_[current_moving_foot].k)}}});
   }

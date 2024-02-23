@@ -197,6 +197,7 @@ protected:
 
   double cost_ = 0.0;
   double PhalangesStiffness_ = 0.0;
+  double pressure_ = 0.0;
   double extra_to_compute_best_position_ = 0.01;
 
   // FootData contains data used to estimate the ground profile
