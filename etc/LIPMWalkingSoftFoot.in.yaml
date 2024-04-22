@@ -83,9 +83,9 @@ robot_models:
     stabilizer:
       dcm_tracking:
         gains:
-          prop: 4 # 4 SoftFoot 3
-          integral: 5 # 5 SoftFoot 0
-          deriv: 0.2 # 0.2 SoftFoot 0
+          prop: 3 #  SoftFoot 3 Flat 4
+          integral: 0.0 # SoftFoot 0 Flat 5
+          deriv: 0.0 #  SoftFoot 0 Flat 0.2
       admittance:
         cop: [0.03, 0.04]
         maxVel:
@@ -102,9 +102,9 @@ robot_models:
         dcmMeasureErrorStd: 0.001
         # biasDriftPerSeconStd: 0.0001
         zmpMeasureErrorStd: 0.0005
-        biasLimit: [0.05, 0.05] # for flat feet
-        # biasLimit: [0.07, 0.05] # For SoftFoot
-        # comBiasLimit: [0.07, 0.02] # For SoftFoot
+        # biasLimit: [0.05, 0.05] # for flat feet
+        biasLimit: [0.07, 0.05] # For SoftFoot
+        comBiasLimit: [0.07, 0.02] # For SoftFoot
         withDCMBias: true
         correctCoMPos: true
       external_wrench:
@@ -124,12 +124,12 @@ robot_models:
         com_offset_com_cutoff: 10.0
         derivator_time_constant: 1.0
     sole:
-      half_length: 0.1
-      half_width: 0.038
+      half_length: 0.065 # 0.1
+      half_width: 0.045 # 0.038
       friction: 0.7
       #leftAnkleOffset: [-0.09, -0.02] # LIPM
-      # leftAnkleOffset: [-0.045, -0.02] # LIPM
-      leftAnkleOffset: [-0.01, -0.02] # target center of foot
+      #leftAnkleOffset: [-0.01, -0.02] # target center of foot
+      leftAnkleOffset: [-0.06, -0.02] # target center of foot
     torso:
       pitch: 0.0
     SwingTraj:
@@ -662,40 +662,40 @@ plans:
       torso_pitch: -0.1
       contacts:
         - pose:
-            translation: [0.035, -0.09, 0.0]
+            translation: [0.035, -0.15, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.035, 0.09, 0.0]
+            translation: [0.035, 0.015, 0.0]
           surface: LeftFootCenter
         - pose:
-            translation: [0.035, -0.09, 0.0]
+            translation: [0.035, -0.15, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.035, 0.09, 0.0]
+            translation: [0.035, 0.015, 0.0]
           surface: LeftFootCenter
         - pose:
-            translation: [0.035, -0.09, 0.0]
+            translation: [0.035, -0.15, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.035, 0.09, 0.0]
+            translation: [0.035, 0.015, 0.0]
           surface: LeftFootCenter
         - pose:
-            translation: [0.035, -0.09, 0.0]
+            translation: [0.035, -0.15, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.035, 0.09, 0.0]
+            translation: [0.035, 0.015, 0.0]
           surface: LeftFootCenter
         - pose:
-            translation: [0.035, -0.09, 0.0]
+            translation: [0.035, -0.15, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.035, 0.09, 0.0]
+            translation: [0.035, 0.015, 0.0]
           surface: LeftFootCenter
         - pose:
-            translation: [0.035, -0.09, 0.0]
+            translation: [0.035, -0.15, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.035, 0.09, 0.0]
+            translation: [0.035, 0.015, 0.0]
           surface: LeftFootCenter
     custom_backward:
       double_support_duration: 0.5
@@ -717,8 +717,8 @@ plans:
       # swing_height: 0.08
       torso_pitch: -0.1
       swing_height: 0.06 #LIPM
-      com_height: 0.817301
-      # com_height: 0.835301 # when we attach SoftFoot
+      # com_height: 0.817301 # Flat feet
+      com_height: 0.835301 # when we attach SoftFoot
       contacts:
         - pose:
             translation: [0.0, -0.15, 0.0]
