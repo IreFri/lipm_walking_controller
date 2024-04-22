@@ -667,6 +667,7 @@ void SoftFootState::teardown()
 
   ctl.logger().removeLogEntry("cost");
   ctl.logger().removeLogEntry("PhalangesStiffness");
+  ctl.logger().removeLogEntry("Air_Pressure");
 }
 
 void SoftFootState::calculateCost(mc_control::fsm::Controller & ctl)
