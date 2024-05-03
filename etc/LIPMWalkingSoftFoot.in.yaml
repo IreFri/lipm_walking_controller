@@ -6,13 +6,13 @@ SwingTraj:
     withdrawOffset: [0, 0, 0.035] # [m]
     approachDurationRatio: 0.25
     approachOffset: [0, 0, 0.035] # [m]
-    swingOffset: [0, 0, 0.065] # [m] [0, 0, 0.1] 
+    swingOffset: [0, 0, 0.13] # [m] [0, 0, 0.1] 
   LandingSearch:
     withdrawDurationRatio: 0.2
     withdrawOffset: [0, 0, 0.04] # [m]
     preApproachDurationRatio: 0.25
     approachDurationRatio: 0.2
-    approachOffset: [0, 0, 0.04] # [m]
+    approachOffset: [0, 0, 0.13] # [m]
 # for the external planner HybridPlanner
 HybridPlanner:
   Tp: 6
@@ -87,7 +87,8 @@ robot_models:
           integral: 0.0 # SoftFoot 0 Flat 5
           deriv: 0.0 #  SoftFoot 0 Flat 0.2
       admittance:
-        cop: [0.03, 0.04]
+        cop: [0.025, 0.03] #[0.03, 0.04]
+        dfz: 0.00035 # 0.00035
         maxVel:
           angular: [3., 3., 3.]
           linear: [1., 1., 1.]
@@ -125,11 +126,11 @@ robot_models:
         derivator_time_constant: 1.0
     sole:
       half_length: 0.065 # 0.1
-      half_width: 0.045 # 0.038
+      half_width: 0.035 # 0.038
       friction: 0.7
       #leftAnkleOffset: [-0.09, -0.02] # LIPM
       #leftAnkleOffset: [-0.01, -0.02] # target center of foot
-      leftAnkleOffset: [-0.06, -0.02] # target center of foot
+      leftAnkleOffset: [-0.01, -0.02] # target center of foot
     torso:
       pitch: 0.0
     SwingTraj:
@@ -182,12 +183,12 @@ robot_models:
         com_offset_com_cutoff: 10.0
         derivator_time_constant: 1.0
     sole:
-      half_length: 0.1
-      half_width: 0.038
+      half_length: 0.07
+      half_width: 0.045
       friction: 0.7
       #leftAnkleOffset: [-0.09, -0.02] # LIPM
       #leftAnkleOffset: [-0.045, -0.02] # LIPM
-      leftAnkleOffset: [-0.01, -0.02] # target center of foot
+      leftAnkleOffset: [-0.05, -0.02] # target center of foot
     torso:
       pitch: 0.0
     SwingTraj:
@@ -711,9 +712,10 @@ plans:
             translation: [0.0, 0.15, 0.0]
           surface: LeftFootCenter
     custom_forward:
-      double_support_duration: 0.6
-      single_support_duration: 1.5
-      step_length: 0.15
+      init_dsp_duration: 0.6
+      double_support_duration: 1.0 #0.6
+      single_support_duration: 1.0 #1.5
+      step_length: 0.10 #0.15
       # swing_height: 0.08
       torso_pitch: -0.1
       swing_height: 0.06 #LIPM
@@ -1774,6 +1776,8 @@ ObserverPipelines:
     - type: Encoder
     - type: Attitude
       required: false
+      config: 
+        gyr_cov: 1e-7
     - type: KinematicInertial
       config:
         anchorFrame:

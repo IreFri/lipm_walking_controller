@@ -70,6 +70,10 @@ SwingTrajCubicSplineSimple::SwingTrajCubicSplineSimple(const sva::PTransformd & 
   double withdrawDuration = config_.withdrawDurationRatio * (endTime_ - startTime_);
   double approachDuration = config_.approachDurationRatio * (endTime_ - startTime_);
 
+  const double new_angle_in_deg = -5.0;
+  const Eigen::Matrix3d R = mc_rbdyn::rpyToMat(0., new_angle_in_deg * M_PI / 180., 0.);
+  const sva::PTransformd R_offset(R, Eigen::Vector3d::Zero());
+
   TrajColl::BoundaryConstraint<Eigen::Vector3d> zeroVelBC(TrajColl::BoundaryConstraintType::Velocity,
                                                           Eigen::Vector3d::Zero());
   TrajColl::BoundaryConstraint<Eigen::Vector3d> zeroAccelBC(TrajColl::BoundaryConstraintType::Acceleration,
@@ -84,9 +88,10 @@ SwingTrajCubicSplineSimple::SwingTrajCubicSplineSimple(const sva::PTransformd & 
       std::make_shared<TrajColl::CubicSpline<Eigen::Vector3d>>(3, zeroVelBC, zeroAccelBC, withdrawPosWaypoints);
   withdrawPosSpline->calcCoeff();
   posFunc_->appendFunc(startTime_ + withdrawDuration, withdrawPosSpline);
-  // Rot
+  // Rot HERE I CHANGED
   rotFunc_->appendPoint(std::make_pair(startTime_, startPose_.rotation().transpose()));
-  rotFunc_->appendPoint(std::make_pair(startTime_ + withdrawDuration, startPose_.rotation().transpose()));
+  // rotFunc_->appendPoint(std::make_pair(startTime_ + withdrawDuration, startPose_.rotation().transpose()));
+  rotFunc_->appendPoint(std::make_pair(startTime_ + withdrawDuration, (R_offset * startPose_).rotation().transpose()));
 
   // Spline to approach foot
   // Pos
@@ -97,8 +102,9 @@ SwingTrajCubicSplineSimple::SwingTrajCubicSplineSimple(const sva::PTransformd & 
       std::make_shared<TrajColl::CubicSpline<Eigen::Vector3d>>(3, zeroAccelBC, zeroVelBC, approachPosWaypoints);
   approachPosSpline->calcCoeff();
   posFunc_->appendFunc(endTime_, approachPosSpline);
-  // Rot
-  rotFunc_->appendPoint(std::make_pair(endTime_ - approachDuration, endPose_.rotation().transpose()));
+  // Rot HERE I CHANGED
+  // rotFunc_->appendPoint(std::make_pair(endTime_ - approachDuration, endPose_.rotation().transpose()));
+  rotFunc_->appendPoint(std::make_pair(endTime_ - approachDuration, (R_offset * endPose_).rotation().transpose()));
   rotFunc_->appendPoint(std::make_pair(endTime_, endPose_.rotation().transpose()));
 
   // Spline to swing foot
@@ -210,4 +216,3 @@ sva::MotionVecd SwingTrajCubicSplineSimple::accel(double t) const
     return sva::MotionVecd(rotFunc_->derivative(t, 2), posFunc_->derivative(t, 2));
   }
 }
-
