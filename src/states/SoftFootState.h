@@ -5,6 +5,8 @@
 #include <mc_rtc/ros.h>
 #include <ros/ros.h>
 #include <std_msgs/Float64.h>
+#include <std_msgs/Float64MultiArray.h>
+
 #include <mutex>
 #include <memory>
 
@@ -198,6 +200,9 @@ protected:
   double cost_ = 0.0;
   double PhalangesStiffness_ = 0.0;
   double pressure_ = 0.0;
+  double ML_ = 0.0;
+  double MR_ = 0.0;
+  double D_ = 0.0;
   double extra_to_compute_best_position_ = 0.01;
 
   // FootData contains data used to estimate the ground profile
@@ -275,6 +280,10 @@ protected:
 
   ros::Subscriber left_foot_range_sensor_sub_;
   void leftFRSCallback(const std_msgs::Float64::ConstPtr& data);
+
+  // Subscriber to update the air pressure for variable stiffness
+  ros::Subscriber air_pressure_sub_;
+  void airPressureCallback(const std_msgs::Float64MultiArray::ConstPtr& data);
 
   std::mutex range_sensor_mutex_;
 

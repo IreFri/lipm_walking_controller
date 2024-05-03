@@ -144,6 +144,18 @@ void SoftFootState::start()
                         mc_rtc::gui::Label("Air_Pressure", [this]() { return this->pressure_; }));
   ctl.logger().addLogEntry("Air_Pressure", [this]() { return pressure_; });
 
+  ctl.gui()->addElement({"SoftFoot"},
+                        mc_rtc::gui::Label("Desired_Pressure", [this]() { return this->D_; }));
+  ctl.logger().addLogEntry("Desired_Pressure", [this]() { return D_; });
+
+  ctl.gui()->addElement({"SoftFoot"},
+                        mc_rtc::gui::Label("Monitor_Left", [this]() { return this->ML_; }));
+  ctl.logger().addLogEntry("Monitor_Left", [this]() { return ML_; });
+
+  ctl.gui()->addElement({"SoftFoot"},
+                        mc_rtc::gui::Label("Monitor_Right", [this]() { return this->MR_; }));
+  ctl.logger().addLogEntry("Monitor_Right", [this]() { return MR_; });
+
   for(const auto & range_sensor_name : range_sensor_names_[Foot::Right])
   {
     ctl.gui()->addElement(
@@ -311,6 +323,39 @@ void SoftFootState::start()
       mc_rtc::gui::plot::Y(
           "Pressure", [this]() { return this->pressure_; }, mc_rtc::gui::Color::Blue));
 
+  ctl.gui()->addPlot(
+      "Monitor_Left",
+      mc_rtc::gui::plot::X("t",
+                           [this, &ctl]()
+                           {
+                             static double t = 0.;
+                             return t += ctl.solver().dt();
+                           }),
+      mc_rtc::gui::plot::Y(
+          "Monitor_Left", [this]() { return this->ML_; }, mc_rtc::gui::Color::Blue));
+
+  ctl.gui()->addPlot(
+      "Monitor_Right",
+      mc_rtc::gui::plot::X("t",
+                           [this, &ctl]()
+                           {
+                             static double t = 0.;
+                             return t += ctl.solver().dt();
+                           }),
+      mc_rtc::gui::plot::Y(
+          "Monitor_Right", [this]() { return this->MR_; }, mc_rtc::gui::Color::Blue));
+
+  ctl.gui()->addPlot(
+      "Desired_Pressure",
+      mc_rtc::gui::plot::X("t",
+                           [this, &ctl]()
+                           {
+                             static double t = 0.;
+                             return t += ctl.solver().dt();
+                           }),
+      mc_rtc::gui::plot::Y(
+          "Desired_Pressure", [this]() { return this->D_; }, mc_rtc::gui::Color::Blue));
+
 
 
 
@@ -327,6 +372,7 @@ void SoftFootState::start()
       "right_range_sensor/distance", 1, &SoftFootState::rightFRSCallback, this);
   left_foot_range_sensor_sub_ = mc_rtc::ROSBridge::get_node_handle()->subscribe("left_range_sensor/distance", 1,
                                                                                 &SoftFootState::leftFRSCallback, this);
+  air_pressure_sub_ = mc_rtc::ROSBridge::get_node_handle()->subscribe("air_pressure", 1, &SoftFootState::airPressureCallback, this);
 }
 
 void SoftFootState::runState()
@@ -1968,6 +2014,16 @@ void SoftFootState::leftFRSCallback(const std_msgs::Float64::ConstPtr & data)
   // const std::string sensor_name = range_sensor_names_[Foot::Left];
   // const std::lock_guard<std::mutex> lock(range_sensor_mutex_);
   // controller().robot().device<mc_mujoco::RangeSensor>(sensor_name).update(data->data * 0.001, time_);
+}
+
+void SoftFootState::airPressureCallback(const std_msgs::Float64MultiArray::ConstPtr & data)
+{
+  double ML = data->data[0];
+  double MR = data->data[1];
+  double D = data->data[2];
+  ML_ = ML;
+  MR_ = MR;
+  D_ = D;
 }
 
 } // namespace lipm_walking::states
