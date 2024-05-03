@@ -18,7 +18,7 @@ namespace lipm_walking
 {
 
 CameraSensorServer::CameraSensorServer(const char * name, const mc_rtc::Configuration & config)
-: it_(*mc_rtc::ROSBridge::get_node_handle())
+: it_(ros::NodeHandle())
 {
   name_ = name;
   data_ = CameraSensorShared::get(name);
@@ -196,7 +196,7 @@ void CameraSensorServer::acquisition()
     std::array<float, 2> pixel;
     const size_t half_kernel_size = kernel_size_ / 2;
     std::vector<Eigen::Vector3d> points;
-    for(size_t i = half_kernel_size; i < width - half_kernel_size; ++i)
+    for(size_t i = half_kernel_size; i < width - half_kernel_size - 120; ++i)
     {
       pixel[0] = static_cast<float>(i);
       for(int j = -1; j <= 1; ++j)
@@ -1009,6 +1009,7 @@ int main(int argc, char * argv[])
   {
     mc_rtc::log::error_and_throw("Must have ObserverPipelines in the configuration");
   }
+  ros::init(argc, argv, camera);
   auto observer_pipelines = ctl_cfg("ObserverPipelines");
   auto observers =
       [&]()
