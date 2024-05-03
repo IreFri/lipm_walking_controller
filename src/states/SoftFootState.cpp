@@ -149,6 +149,14 @@ void SoftFootState::start()
   ctl.logger().addLogEntry("Desired_Pressure", [this]() { return D_; });
 
   ctl.gui()->addElement({"SoftFoot"},
+                        mc_rtc::gui::Label("WhichFoot", [this]() { return this->WhichFoot_; }));
+  ctl.logger().addLogEntry("WhichFoot", [this]() { return WhichFoot_; });
+
+  ctl.gui()->addElement({"SoftFoot"},
+                        mc_rtc::gui::Label("valvesStatus", [this]() { return this->valvesStatus_; }));
+  ctl.logger().addLogEntry("valvesStatus", [this]() { return valvesStatus_; });
+
+  ctl.gui()->addElement({"SoftFoot"},
                         mc_rtc::gui::Label("Monitor_Left", [this]() { return this->ML_; }));
   ctl.logger().addLogEntry("Monitor_Left", [this]() { return ML_; });
 
@@ -322,6 +330,28 @@ void SoftFootState::start()
                            }),
       mc_rtc::gui::plot::Y(
           "Pressure", [this]() { return this->pressure_; }, mc_rtc::gui::Color::Blue));
+
+  ctl.gui()->addPlot(
+      "WhichFoot",
+      mc_rtc::gui::plot::X("t",
+                           [this, &ctl]()
+                           {
+                             static double t = 0.;
+                             return t += ctl.solver().dt();
+                           }),
+      mc_rtc::gui::plot::Y(
+          "WhichFoot", [this]() { return this->WhichFoot_; }, mc_rtc::gui::Color::Blue));
+
+  ctl.gui()->addPlot(
+      "valvesStatus",
+      mc_rtc::gui::plot::X("t",
+                           [this, &ctl]()
+                           {
+                             static double t = 0.;
+                             return t += ctl.solver().dt();
+                           }),
+      mc_rtc::gui::plot::Y(
+          "valvesStatus", [this]() { return this->valvesStatus_; }, mc_rtc::gui::Color::Blue));
 
   ctl.gui()->addPlot(
       "Monitor_Left",
@@ -690,10 +720,12 @@ void SoftFootState::runState()
   if(checkSingleSupportTime(0.9))
   {
     srv.request.valvesStatus = 0; // Close the solenoid
+    valvesStatus_ = 0;
   }
   if(checkSingleSupportTime(0.05))
   {
     srv.request.valvesStatus = 1; // Open the solenoid
+    valvesStatus_ = 1;
   }
 
 }
@@ -714,6 +746,8 @@ void SoftFootState::teardown()
   ctl.logger().removeLogEntry("cost");
   ctl.logger().removeLogEntry("PhalangesStiffness");
   ctl.logger().removeLogEntry("Air_Pressure");
+  ctl.logger().removeLogEntry("WhichFoot");
+  ctl.logger().removeLogEntry("valvesStatus");
 }
 
 void SoftFootState::calculateCost(mc_control::fsm::Controller & ctl)
@@ -1076,10 +1110,12 @@ void SoftFootState::updateVariableStiffness(mc_control::fsm::Controller & ctl,
   if(current_moving_foot == Foot::Left)
   {
     srv.request.WhichFoot = 0;
+    WhichFoot_ = 0;
   }
   else
   {
     srv.request.WhichFoot = 1;
+    WhichFoot_ = 1;
   }
   
   if(client_.call(srv))

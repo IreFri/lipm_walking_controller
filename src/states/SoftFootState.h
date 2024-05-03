@@ -203,6 +203,8 @@ protected:
   double ML_ = 0.0;
   double MR_ = 0.0;
   double D_ = 0.0;
+  int WhichFoot_ = 0.0;
+  int valvesStatus_ = 0.0;
   double extra_to_compute_best_position_ = 0.01;
 
   // FootData contains data used to estimate the ground profile

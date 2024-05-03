@@ -196,7 +196,7 @@ void CameraSensorServer::acquisition()
     std::array<float, 2> pixel;
     const size_t half_kernel_size = kernel_size_ / 2;
     std::vector<Eigen::Vector3d> points;
-    for(size_t i = half_kernel_size; i < width - half_kernel_size - 120; ++i)
+    for(size_t i = half_kernel_size; i < width - half_kernel_size - 40; ++i)
     {
       pixel[0] = static_cast<float>(i);
       for(int j = -1; j <= 1; ++j)

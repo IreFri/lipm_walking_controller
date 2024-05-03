@@ -1,0 +1,21 @@
+diff --git a/src/observer/CameraSensorServer.cpp b/src/observer/CameraSensorServer.cpp
+index 8a3b015..8b401fc 100644
+--- a/src/observer/CameraSensorServer.cpp
++++ b/src/observer/CameraSensorServer.cpp
+@@ -18,7 +18,7 @@ namespace lipm_walking
+ {
+ 
+ CameraSensorServer::CameraSensorServer(const char * name, const mc_rtc::Configuration & config)
+-: it_(*mc_rtc::ROSBridge::get_node_handle())
++: it_(ros::NodeHandle())
+ {
+   name_ = name;
+   data_ = CameraSensorShared::get(name);
+@@ -1009,6 +1009,7 @@ int main(int argc, char * argv[])
+   {
+     mc_rtc::log::error_and_throw("Must have ObserverPipelines in the configuration");
+   }
++  ros::init(argc, argv, camera);
+   auto observer_pipelines = ctl_cfg("ObserverPipelines");
+   auto observers =
+       [&]()
