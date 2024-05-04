@@ -155,7 +155,7 @@ protected:
 
   void extractAltitudeProfileFromGroundSegment(const Foot & current_moving_foot);
 
-  void updateVariableStiffness(mc_control::fsm::Controller & ctl, const Foot & current_moving_foot);
+  void updateVariableStiffness(mc_control::fsm::Controller & ctl, const Foot & current_moving_foot, bool open_valve);
 
   void computeSegmentConvexHull(mc_control::fsm::Controller & ctl, const Foot & current_moving_foot);
 
@@ -202,9 +202,9 @@ protected:
   double pressure_ = 0.0;
   double ML_ = 0.0;
   double MR_ = 0.0;
-  double D_ = 0.0;
-  int WhichFoot_ = 0.0;
-  int valvesStatus_ = 0.0;
+  int WhichFoot_;
+  double D_;
+
   double extra_to_compute_best_position_ = 0.01;
 
   // FootData contains data used to estimate the ground profile
@@ -223,6 +223,7 @@ protected:
     double position_offset_z;
     bool need_reset;
     bool computation_done;
+    int valves_status = 0;
   };
   std::unordered_map<Foot, FootData> foot_data_;
 
@@ -288,6 +289,7 @@ protected:
   void airPressureCallback(const std_msgs::Float64MultiArray::ConstPtr& data);
 
   std::mutex range_sensor_mutex_;
+  std::mutex variable_stiffness_mutex_;
 
   bool debug_output_ = false;
 
