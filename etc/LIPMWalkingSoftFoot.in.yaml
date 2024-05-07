@@ -83,11 +83,11 @@ robot_models:
     stabilizer:
       dcm_tracking:
         gains:
-          prop: 3 #  SoftFoot 3 Flat 4
+          prop: [3,3] #  SoftFoot 3 Flat 4
           integral: 0.0 # SoftFoot 0 Flat 5
-          deriv: 0.0 #  SoftFoot 0 Flat 0.2
+          deriv: [1,0.0] #  SoftFoot 0 Flat 0.2
       admittance:
-        cop: [0.025, 0.03] #[0.03, 0.04]
+        cop: [0.02, 0.03] #[0.03, 0.04] [0.025, 0.03]
         dfz: 0.00035 # 0.00035
         maxVel:
           angular: [3., 3., 3.]
@@ -125,12 +125,12 @@ robot_models:
         com_offset_com_cutoff: 10.0
         derivator_time_constant: 1.0
     sole:
-      half_length: 0.065 # 0.1
+      half_length: 0.075 # 0.1
       half_width: 0.035 # 0.038
       friction: 0.7
       #leftAnkleOffset: [-0.09, -0.02] # LIPM
       #leftAnkleOffset: [-0.01, -0.02] # target center of foot
-      leftAnkleOffset: [-0.01, -0.02] # target center of foot
+      leftAnkleOffset: [-0.01, -0.03] # target center of foot
     torso:
       pitch: 0.0
     SwingTraj:
@@ -712,21 +712,21 @@ plans:
             translation: [0.0, 0.15, 0.0]
           surface: LeftFootCenter
     custom_forward:
-      init_dsp_duration: 0.6
+      # init_dsp_duration: 0.6
       double_support_duration: 1.0 #0.6
-      single_support_duration: 1.0 #1.5
-      step_length: 0.10 #0.15
+      single_support_duration: 1.5 #1.5
+      step_length: 0.1 #0.15
       # swing_height: 0.08
       torso_pitch: -0.1
       swing_height: 0.06 #LIPM
-      # com_height: 0.817301 # Flat feet
-      com_height: 0.835301 # when we attach SoftFoot
+      # com_height: 0.817301 # Flat feet 0.835301 when we attach SoftFoot
+      com_height: 0.81 
       contacts:
         - pose:
-            translation: [0.0, -0.15, 0.0]
+            translation: [0.0, -0.20, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.0, 0.15, 0.0]
+            translation: [0.0, 0.20, 0.0]
           surface: LeftFootCenter
     custom_lateral:
       double_support_duration: 0.4
@@ -1777,7 +1777,8 @@ ObserverPipelines:
     - type: Attitude
       required: false
       config: 
-        gyr_cov: 1e-7
+        KalmanFilter:
+          gyr_cov: 1e-6
     - type: KinematicInertial
       config:
         anchorFrame:
