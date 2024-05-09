@@ -85,7 +85,7 @@ robot_models:
         gains:
           prop: [3,3] #  SoftFoot 3 Flat 4
           integral: 0.0 # SoftFoot 0 Flat 5
-          deriv: [1,0.0] #  SoftFoot 0 Flat 0.2
+          deriv: [1.0,0.0] #  SoftFoot 0 Flat 0.2
       admittance:
         cop: [0.02, 0.03] #[0.03, 0.04] [0.025, 0.03]
         dfz: 0.00035 # 0.00035
@@ -130,7 +130,7 @@ robot_models:
       friction: 0.7
       #leftAnkleOffset: [-0.09, -0.02] # LIPM
       #leftAnkleOffset: [-0.01, -0.02] # target center of foot
-      leftAnkleOffset: [-0.01, -0.03] # target center of foot
+      leftAnkleOffset: [-0.03, -0.03] # target center of foot
     torso:
       pitch: 0.0
     SwingTraj:
@@ -720,7 +720,7 @@ plans:
       torso_pitch: -0.1
       swing_height: 0.06 #LIPM
       # com_height: 0.817301 # Flat feet 0.835301 when we attach SoftFoot
-      com_height: 0.81 
+      com_height: 0.83 
       contacts:
         - pose:
             translation: [0.0, -0.20, 0.0]
