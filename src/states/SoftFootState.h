@@ -259,8 +259,8 @@ protected:
 
   // TODO: Ugly hardcoded value
   // double foot_length_ = 0.27742;
-  double foot_length_ = 0.34742;
-  double landing_to_foot_middle_offset_ = 0.0328;
+  double foot_length_ = 0.15;
+  double landing_to_foot_middle_offset_ = 0.0;
   size_t nr_phalanxes_;
   double phalanx_length_;
   double time_ = 0.; // controller time

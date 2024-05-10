@@ -1,0 +1,26 @@
+diff --git a/src/observer/CameraSensorServer.cpp b/src/observer/CameraSensorServer.cpp
+index 9be5aa8..b9fe083 100644
+--- a/src/observer/CameraSensorServer.cpp
++++ b/src/observer/CameraSensorServer.cpp
+@@ -980,6 +980,7 @@ void CameraSensorServer::do_computation()
+       const auto & p = points[i];
+       data_->ground_points[i] = Eigen::Vector3d(p.x(), data_->X_0_b.translation().y(), p.z());
+     }
++    mc_rtc::log::info("The estimated ground contains {} points", data_->ground_points.size());
+   }
+   data_->result_ready->notify_all();
+ }
+diff --git a/src/states/SoftFootState.cpp b/src/states/SoftFootState.cpp
+index cd8eb5c..ca8ae11 100644
+--- a/src/states/SoftFootState.cpp
++++ b/src/states/SoftFootState.cpp
+@@ -644,6 +644,9 @@ void SoftFootState::runState()
+                                                                + landing_to_foot_middle_offset_ - foot_length_ * 0.55
+                                                                - extra_to_compute_best_position_;
+ 
++  mc_rtc::log::info("ground.back().x() {} ground.front().x() {} enough_ground_in_front {} enough_ground_in_back {} checkSingleSupportTime(0.5) {}",
++    ground.back().x(), ground.front().x(), enough_ground_in_front, enough_ground_in_back, checkSingleSupportTime(0.5));
++
+   if(!foot_data_[current_moving_foot].computation_done && enough_ground_in_front && enough_ground_in_back
+      && checkSingleSupportTime(0.5))
+   {

@@ -105,7 +105,7 @@ void CameraSensor::update(mc_control::MCController & ctl)
     {
       ground_points_[i] = data_->ground_points[i];
     }
-    std::cout << "data_->aligned_points.size() " << data_->aligned_points.size() << std::endl;
+    // std::cout << "data_->aligned_points.size() " << data_->aligned_points.size() << std::endl;
     aligned_points_.resize(data_->aligned_points.size());
     for(size_t i = 0; i < data_->aligned_points.size(); ++i)
     {
@@ -455,9 +455,9 @@ void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
             {
                {
                 ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
-                std::cout << "Getting data from the server " << std::endl;
+                // std::cout << "Getting data from the server " << std::endl;
                 points_.resize(data_->points.size());
-                std::cout << "New points with size of " << points_.size() << std::endl;
+                // std::cout << "New points with size of " << points_.size() << std::endl;
                 for(size_t i = 0; i < data_->points.size(); ++i)
                 {
                   points_[i] = data_->points[i];

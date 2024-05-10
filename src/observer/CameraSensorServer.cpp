@@ -196,7 +196,7 @@ void CameraSensorServer::acquisition()
     std::array<float, 2> pixel;
     const size_t half_kernel_size = kernel_size_ / 2;
     std::vector<Eigen::Vector3d> points;
-    for(size_t i = half_kernel_size; i < width - half_kernel_size - 40; ++i)
+    for(size_t i = half_kernel_size; i < width - half_kernel_size - 50; ++i)
     {
       pixel[0] = static_cast<float>(i);
       for(int j = -1; j <= 1; ++j)
@@ -980,6 +980,7 @@ void CameraSensorServer::do_computation()
       const auto & p = points[i];
       data_->ground_points[i] = Eigen::Vector3d(p.x(), data_->X_0_b.translation().y(), p.z());
     }
+    mc_rtc::log::info("The estimated ground contains {} points", data_->ground_points.size());
   }
   data_->result_ready->notify_all();
 }

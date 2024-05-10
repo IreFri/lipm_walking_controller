@@ -611,7 +611,8 @@ void SoftFootState::runState()
 
   // Open the valves
   if(foot_data_[current_moving_foot].valves_status == 0 && checkSingleSupportTime(0.05) && belowSingleSupportTime(0.75))
-  {
+  { 
+    // std::cout << "CHECK IF GOING " << std::endl;
     if(with_variable_stiffness_)
     {
       updateVariableStiffness(ctl, current_moving_foot, true);
@@ -640,9 +641,13 @@ void SoftFootState::runState()
   const bool enough_ground_in_front = ground.back().x() >= X_0_landing.translation().x()
                                                                + landing_to_foot_middle_offset_ + foot_length_ * 0.55
                                                                + extra_to_compute_best_position_;
+  // const bool enough_ground_in_back = true;
   const bool enough_ground_in_back = ground.front().x() <= X_0_landing.translation().x()
                                                                + landing_to_foot_middle_offset_ - foot_length_ * 0.55
                                                                - extra_to_compute_best_position_;
+
+  // mc_rtc::log::info("ground.back().x() {} ground.front().x() {} enough_ground_in_front {} enough_ground_in_back {} checkSingleSupportTime(0.5) {}",
+  //   ground.back().x(), ground.front().x(), enough_ground_in_front, enough_ground_in_back, checkSingleSupportTime(0.5));
 
   if(!foot_data_[current_moving_foot].computation_done && enough_ground_in_front && enough_ground_in_back
      && checkSingleSupportTime(0.5))
