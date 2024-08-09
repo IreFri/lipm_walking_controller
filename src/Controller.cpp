@@ -233,14 +233,16 @@ void Controller::reset(const mc_control::ControllerResetData & data)
   sole_ = robotConfig("sole");
 
   // If an ankle offset is specified use it, otherwise compute it
-  if(robotConfig("sole").has("leftAnkleOffset"))
-  {
-    sole_.leftAnkleOffset = robotConfig("sole")("leftAnkleOffset");
-  }
-  else
-  {
-    sole_.leftAnkleOffset = X_lfc_lf.translation().head<2>();
-  }
+  // if(robotConfig("sole").has("leftAnkleOffset"))
+  // {
+  //   sole_.leftAnkleOffset = robotConfig("sole")("leftAnkleOffset");
+  // }
+  // else
+  // {
+  //   sole_.leftAnkleOffset = X_lfc_lf.translation().head<2>();
+  // }
+
+  sole_.leftAnkleOffset = Eigen::Vector2d(-0.03, -0.03);
 
   // Configure MPC solver
   mpcConfig_ = config()("mpc");

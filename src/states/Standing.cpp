@@ -162,6 +162,8 @@ void states::Standing::start()
                            [this]() { startWalking(); }));
   }
 
+  ctl.sole_.leftAnkleOffset = Eigen::Vector2d(-0.03, -0.03);
+  ctl.mpc_.sole(ctl.sole_);
   runState(); // don't wait till next cycle to update reference and tasks
 }
 
@@ -321,6 +323,12 @@ bool states::Standing::checkTransitions()
   {
     ctl.nextDoubleSupportDuration(ctl.plan.initDSPDuration());
     ctl.startLogSegment(ctl.plan.name);
+    auto robotConfig = ctl.config()("robot_models")(ctl.controlRobot().name());
+    if(robotConfig("sole").has("leftAnkleOffset"))
+    {
+      ctl.sole_.leftAnkleOffset = robotConfig("sole")("leftAnkleOffset");
+    }
+    ctl.mpc_.sole(ctl.sole_);
     ctl.isWalking = true;
     output("DoubleSupport");
     return true;
