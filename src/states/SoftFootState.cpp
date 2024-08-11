@@ -1169,30 +1169,45 @@ void SoftFootState::updateVariableStiffness(mc_control::fsm::Controller & ctl,
         WhichFoot_ = 1;
       }
 
-      if(client_.call(srv) && foot_data_[current_moving_foot].valves_status == 1)
+      // if(client_.call(srv) && foot_data_[current_moving_foot].valves_status == 1)
+      int valves_status;
       {
         const std::lock_guard<std::mutex> lock(variable_stiffness_mutex_);
-        mc_rtc::log::success("[SoftFootState] We udpate the sole stiffness with {}", srv.response.stiffness, srv.response.pressure);
+        valves_status = foot_data_[current_moving_foot].valves_status;
+      }
+      mc_rtc::log::info("Calling the server and the valve status is {}", valves_status);
+      if(client_.call(srv) && valves_status == 1)
+      {
+        // const std::lock_guard<std::mutex> lock(variable_stiffness_mutex_);
+        // mc_rtc::log::success("[SoftFootState] We udpate the sole stiffness with {}", srv.response.stiffness, srv.response.pressure);
+        // foot_data_[current_moving_foot].k = srv.response.stiffness;
+
+        // // Solution to modify the variable stiffness
+        // auto stiffnessToAngle = [this](double VarStiff)
+        // {
+        //   double angle_low = 0;
+        //   double angle_high = 1;
+        //   double stiffness_low = 0;
+        //   double stiffness_high = 100;
+        //   return angle_low + (VarStiff - stiffness_low) * (angle_high - angle_low) / (stiffness_high - stiffness_low);
+        // };
+        // auto postureTask = ctl.getPostureTask(ctl.robot().name());
+        // // Reset stifness for both feet gains
+        // postureTask->jointGains(ctl.solver(),
+        //                         {tasks::qp::JointGains("R_VARSTIFF", 350), tasks::qp::JointGains("L_VARSTIFF", 350)});
+        // // Set computed stiffness for current moving foot
+        // PhalangesStiffness_ = foot_data_[current_moving_foot].k;
+        // pressure_ = srv.response.pressure;
+        // postureTask->target({{variable_stiffness_jointname_[current_moving_foot],
+        //                       std::vector<double>{stiffnessToAngle(foot_data_[current_moving_foot].k)}}});
+        const std::lock_guard<std::mutex> lock(variable_stiffness_mutex_);
+        mc_rtc::log::success("[SoftFootState] We udpate the sole stiffness with {} and pressure {}", srv.response.stiffness, srv.response.pressure);
         foot_data_[current_moving_foot].k = srv.response.stiffness;
 
-        // Solution to modify the variable stiffness
-        auto stiffnessToAngle = [this](double VarStiff)
-        {
-          double angle_low = 0;
-          double angle_high = 1;
-          double stiffness_low = 0;
-          double stiffness_high = 100;
-          return angle_low + (VarStiff - stiffness_low) * (angle_high - angle_low) / (stiffness_high - stiffness_low);
-        };
-        auto postureTask = ctl.getPostureTask(ctl.robot().name());
-        // Reset stifness for both feet gains
-        postureTask->jointGains(ctl.solver(),
-                                {tasks::qp::JointGains("R_VARSTIFF", 350), tasks::qp::JointGains("L_VARSTIFF", 350)});
-        // Set computed stiffness for current moving foot
+        //Set computed stiffness for current moving foot
         PhalangesStiffness_ = foot_data_[current_moving_foot].k;
         pressure_ = srv.response.pressure;
-        postureTask->target({{variable_stiffness_jointname_[current_moving_foot],
-                              std::vector<double>{stiffnessToAngle(foot_data_[current_moving_foot].k)}}});
+
       }
       else
       {
