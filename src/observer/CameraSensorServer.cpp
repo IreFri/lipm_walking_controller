@@ -249,7 +249,7 @@ void CameraSensorServer::acquisition()
       }
 
       uint16_t* ptr = (uint16_t*)frame.get_data();
-      int stride = frame.as<video_frame>().get_stride_in_bytes();
+      int stride = frame.as<rs2::video_frame>().get_stride_in_bytes();
 
       for(size_t i = width - half_kernel_size - 50; i < width; ++i)
       {
