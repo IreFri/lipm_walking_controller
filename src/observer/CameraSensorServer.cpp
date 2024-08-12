@@ -237,13 +237,29 @@ void CameraSensorServer::acquisition()
     // Publish in ROS
     {
       // Allocate the image
+      // if(image_colorized_depth_.size() != cv::Size(width, height))
+      // {
+      //   image_colorized_depth_ = cv::Mat(height, width, CV_8UC3);
+      // }
+
+      // image_colorized_depth_.data = (uint8_t*)color_map_.process(frame).get_data();
       if(image_colorized_depth_.size() != cv::Size(width, height))
       {
         image_colorized_depth_ = cv::Mat(height, width, CV_8UC3);
       }
 
-      image_colorized_depth_.data = (uint8_t*)color_map_.process(frame).get_data();
+      uint16_t* ptr = (uint16_t*)frame.get_data();
+      int stride = frame.as<video_frame>().get_stride_in_bytes();
 
+      for(size_t i = width - half_kernel_size - 50; i < width; ++i)
+      {
+        for(int j = 0; j < height; ++j)
+        {
+          ptr[i * stride + j] = 0;
+        }
+      }
+
+      image_colorized_depth_.data = (uint8_t*)color_map_.process(frame).get_data();
       // if (frame.is<rs2::depth_frame>())
       // {
       //     image = fix_depth_scale(image, _depth_scaled_image[stream]);

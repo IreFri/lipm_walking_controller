@@ -1176,7 +1176,7 @@ void SoftFootState::updateVariableStiffness(mc_control::fsm::Controller & ctl,
         valves_status = foot_data_[current_moving_foot].valves_status;
       }
       mc_rtc::log::info("Calling the server and the valve status is {}", valves_status);
-      if(client_.call(srv) && valves_status == 1)
+      if(client_.call(srv))
       {
         // const std::lock_guard<std::mutex> lock(variable_stiffness_mutex_);
         // mc_rtc::log::success("[SoftFootState] We udpate the sole stiffness with {}", srv.response.stiffness, srv.response.pressure);

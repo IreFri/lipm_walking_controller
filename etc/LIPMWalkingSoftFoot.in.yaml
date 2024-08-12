@@ -130,7 +130,7 @@ robot_models:
       friction: 0.7
       #leftAnkleOffset: [-0.09, -0.02] # LIPM
       #leftAnkleOffset: [-0.01, -0.02] # target center of foot
-      leftAnkleOffset: [-0.04, -0.03] # target center of foot
+      leftAnkleOffset: [-0.06, -0.03] # target center of foot
     torso:
       pitch: 0.0
     SwingTraj:
