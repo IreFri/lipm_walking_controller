@@ -68,6 +68,7 @@ CameraSensorServer::CameraSensorServer(const char * name, const mc_rtc::Configur
   }
 
   image_pub_ = it_.advertise("/camera/" + name_, 1);
+  image_pub_color_ = it_.advertise("/camera_color/" + name_, 1);
 
   mc_rtc::log::info("[CameraSensorServer::{}] 'camera_serial' is {}", name_, camera_serial_);
   mc_rtc::log::info("[CameraSensorServer::{}] 'path_to_preset' is {}", name_, path_to_preset_);
@@ -251,11 +252,11 @@ void CameraSensorServer::acquisition()
       uint16_t* ptr = (uint16_t*)frame.get_data();
       int stride = frame.as<rs2::video_frame>().get_stride_in_bytes();
 
-      for(size_t i = width - half_kernel_size - 50; i < width; ++i)
+      for(size_t i = width - half_kernel_size - 100; i < width; ++i)
       {
         for(int j = 0; j < height; ++j)
         {
-          ptr[i * stride + j] = 0;
+          ptr[j * stride + i] = 0;
         }
       }
 
@@ -278,6 +279,33 @@ void CameraSensorServer::acquisition()
 
       // Transfer the unique pointer ownership to the RMW
       image_pub_.publish(img_msg);
+      {
+        auto frame = frames.get_color_frame();
+
+        const size_t height = static_cast<size_t>(frame.get_height());
+        const size_t width = static_cast<size_t>(frame.get_width());
+
+        if(image_rgb_.size() != cv::Size(width,height))
+        {
+          image_rgb = cv::Mat(height, width, CV_8UC3);
+        }
+
+        image_rgb_.data = (uint8_t*)frame.get_data();
+
+        sensor_msgs::Image img_msg;
+        // Convert the CV::Mat into a ROS image message (1 copy is done here)
+        cv_bridge::CvImage(std_msgs::Header(), sensor_msgs::image_encodings::RGB8, image_rgb_).toImageMsg(img_msg);
+
+        // Convert OpenCV Mat to ROS Image
+        img_msg.header.frame_id = "/camera/"+name_;
+        img_msg.height = height;
+        img_msg.width = width;
+        img_msg.is_bigendian = false;
+        img_msg.step = width * image_rgb_.elemSize();
+
+        //Transfer the unique pointer ownership to the RMW
+        image_pub_color_.publish(img_msg);
+      }
 
       ros::spinOnce();
     }

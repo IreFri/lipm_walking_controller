@@ -72,6 +72,8 @@ private:
   // ROS part to publish the image
   image_transport::ImageTransport it_;
   image_transport::Publisher image_pub_;
+  image_transport::Publisher image_pub_color_;
+  cv::Mat image_rgb_;
   rs2::colorizer color_map_;
   cv::Mat image_colorized_depth_;
 };
