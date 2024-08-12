@@ -217,6 +217,7 @@ protected:
     std::vector<std::array<double, 2>> phalanxes;
     std::vector<double> altitude;
     double k;
+    double pressure;
     double angle;
     double min_max_phalanxes_angle;
     double position_offset_x;

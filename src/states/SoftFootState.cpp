@@ -320,8 +320,33 @@ void SoftFootState::start()
                              return t += ctl.solver().dt();
                            }),
       mc_rtc::gui::plot::Y(
-          "SoleStiffness", [this]() { const std::lock_guard<std::mutex> lock(variable_stiffness_mutex_); return this->PhalangesStiffness_; }, mc_rtc::gui::Color::Blue));
+          "Left Foot", [this]() { const std::lock_guard<std::mutex> lock(variable_stiffness_mutex_); return this->PhalangesStiffness_; }, mc_rtc::gui::Color::Blue));
 
+  ctl.gui()->addPlot(
+      "Feet Stiffness",
+      mc_rtc::gui::plot::X("t",
+                           [this, &ctl]()
+                           {
+                             static double t = 0.;
+                             return t += ctl.solver().dt();
+                           }),
+      mc_rtc::gui::plot::Y(
+          "Left Foot", [this]() { const std::lock_guard<std::mutex> lock(variable_stiffness_mutex_); return foot_data_[Foot::Left].k; }, mc_rtc::gui::Color::Blue), 
+      mc_rtc::gui::plot::Y(
+          "Right Foot", [this]() { const std::lock_guard<std::mutex> lock(variable_stiffness_mutex_); return foot_data_[Foot::Right].k; }, mc_rtc::gui::Color::Red));
+
+  ctl.gui()->addPlot(
+      "Feet Pressure",
+      mc_rtc::gui::plot::X("t",
+                           [this, &ctl]()
+                           {
+                             static double t = 0.;
+                             return t += ctl.solver().dt();
+                           }),
+      mc_rtc::gui::plot::Y(
+          "Left Foot", [this]() { const std::lock_guard<std::mutex> lock(variable_stiffness_mutex_); return foot_data_[Foot::Left].pressure; }, mc_rtc::gui::Color::Blue), 
+      mc_rtc::gui::plot::Y(
+          "Right Foot", [this]() { const std::lock_guard<std::mutex> lock(variable_stiffness_mutex_); return foot_data_[Foot::Right].pressure; }, mc_rtc::gui::Color::Red));
 
   ctl.gui()->addPlot(
       "Pressure",
@@ -1203,6 +1228,7 @@ void SoftFootState::updateVariableStiffness(mc_control::fsm::Controller & ctl,
         const std::lock_guard<std::mutex> lock(variable_stiffness_mutex_);
         mc_rtc::log::success("[SoftFootState] We udpate the sole stiffness with {} and pressure {}", srv.response.stiffness, srv.response.pressure);
         foot_data_[current_moving_foot].k = srv.response.stiffness;
+        foot_data_[current_moving_foot].pressure = srv.response.pressure;
 
         //Set computed stiffness for current moving foot
         PhalangesStiffness_ = foot_data_[current_moving_foot].k;

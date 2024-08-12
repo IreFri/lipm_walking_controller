@@ -287,7 +287,7 @@ void CameraSensorServer::acquisition()
 
         if(image_rgb_.size() != cv::Size(width,height))
         {
-          image_rgb = cv::Mat(height, width, CV_8UC3);
+          image_rgb_ = cv::Mat(height, width, CV_8UC3);
         }
 
         image_rgb_.data = (uint8_t*)frame.get_data();
