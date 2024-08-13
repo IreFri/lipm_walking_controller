@@ -12,14 +12,14 @@ LIPMWalking::WalkFSM:
 
 LIPMWalking::SoftFoot::Configured:
   base: LIPMWalking::SoftFoot
-  with_variable_stiffness: false
+  with_variable_stiffness: true
   with_ankle_rotation: false
   with_foot_adjustment: false
   use_camera_sensor: true
   nr_phalanx: 1
   range_sensors:
     left_foot: ["LeftFootCameraSensor"]
-    right_foot: ["RightFootRangeSensor::Top", "RightFootRangeSensor::Bot"]
+    right_foot: ["RightFootCameraSensor"]
 
 LIPMWalking::WalkFSMWithSoftFootState:
   base: Parallel

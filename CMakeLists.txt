@@ -44,6 +44,8 @@ set(INSTALL_PKG_CONFIG_FILE
     CACHE BOOL "" FORCE)
 set(CXX_DISABLE_WERROR ON)
 
+set(CATKIN_INSTALL_INTO_PREFIX_ROOT FALSE)
+
 include(cmake/base.cmake)
 
 project(${PROJECT_NAME} LANGUAGES C CXX)
@@ -53,12 +55,18 @@ add_project_dependency(Ceres REQUIRED)
 add_project_dependency(Open3D REQUIRED)
 find_package(realsense2 REQUIRED)
 add_project_dependency(mc_rtc REQUIRED)
+find_package(image_transport REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(OpenCV REQUIRED)
 if(NOT TARGET mc_rtc::mc_rtc_ros)
   message(
     FATAL_ERROR
       "mc_rtc must be built with ROS support for this controller to work")
 endif()
 add_project_dependency(eigen-quadprog REQUIRED)
+# For Boost IPC
+find_package(Boost REQUIRED COMPONENTS thread system)
 
 if(EXISTS "${MC_RTC_LIBDIR}/mc_controller/etc/LIPMWalking.conf")
   message(
@@ -77,16 +85,17 @@ add_project_dependency(trajectory_collection REQUIRED)
 find_package(catkin REQUIRED COMPONENTS roscpp variable_stiffness)
 find_package(mc_mujoco REQUIRED)
 
+set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(QHULL_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+set(SERIAL_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 add_subdirectory(3rd-party/qhull EXCLUDE_FROM_ALL)
-set(BUILD_TESTS OFF)
-set(SERIAL_BUILD_SHARED_LIBS ON)
 add_subdirectory(3rd-party/CppLinuxSerial EXCLUDE_FROM_ALL)
 add_subdirectory(3rd-party/serial EXCLUDE_FROM_ALL)
 
 add_subdirectory(plugins/ExternalFootstepPlanner)
 add_subdirectory(src)
 add_subdirectory(nano)
-# add_subdirectory(camera)
+add_subdirectory(camera)
 
 set(PACKAGE_EXTRA_MACROS
     "set(LIPM_WALKING_STATES_LIBRARIES \"${MC_CONTROLLER_INSTALL_PREFIX}/lipm_walking_controller_softfoot/states\")

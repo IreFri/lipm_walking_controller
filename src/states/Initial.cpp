@@ -46,6 +46,8 @@ void states::Initial::start()
   postureTaskIsActive_ = true;
   postureTaskWasActive_ = true;
   startStandingButton_ = false;
+  delayStartStanding_ = false;
+  delayStartStandingCounter_ = 0;
   startStanding_ = ctl.config()("autoplay", false);
 
   internalReset();
@@ -91,7 +93,16 @@ void states::Initial::runState()
   {
     showStartStandingButton();
     postureTaskIsActive_ = false;
+    delayStartStanding_ = true;
+  }
+
+  if(delayStartStanding_ && delayStartStandingCounter_ == 10 / ctl.solver().dt())
+  {
     startStanding_ = true;
+  }
+  else if(delayStartStanding_)
+  {
+    ++ delayStartStandingCounter_;
   }
 }
 
@@ -110,7 +121,7 @@ void states::Initial::showStartStandingButton()
   if(!startStandingButton_ && gui())
   {
     using namespace mc_rtc::gui;
-    gui()->addElement({"Walking", "Main"}, Button("Start standing", [this]() { startStanding_ = true; }));
+    gui()->addElement({"Walking", "Main"}, Button("Start standing", [this]() { delayStartStanding_ = true; }));
     startStandingButton_ = true;
   }
 }

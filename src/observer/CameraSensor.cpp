@@ -1,124 +1,32 @@
 #include <lipm_walking/observer/CameraSensor.h>
-#include <mc_observers/ObserverMacros.h>
-#include <mc_rtc/version.h>
+
 #include <mc_control/MCController.h>
 #include <mc_mujoco/devices/RangeSensor.h>
+#include <mc_observers/ObserverMacros.h>
+#include <mc_rtc/version.h>
+
 #include <chrono>
 #include <fstream>
-#include <librealsense2/rs.hpp> // Include RealSense Cross Platform API
-#include <librealsense2/rs_advanced_mode.hpp>
-
-
-#include <ceres/ceres.h>
-#include <ceres/rotation.h>
-
-namespace sva
-{
-
-using PTransformd = PTransform<double>;
-
-}
-
-namespace
-{
-
-/** We redefined sva::Rot. functions to make them work with non-scalar types */
-
-template<typename T>
-inline Eigen::Matrix3<T> RotX(T theta)
-{
-  T s = sin(theta), c = cos(theta);
-  return (Eigen::Matrix3<T>() << T(1), T(0), T(0), T(0), c, s, T(0), -s, c).finished();
-}
-
-template<typename T>
-inline Eigen::Matrix3<T> RotY(T theta)
-{
-  T s = sin(theta), c = cos(theta);
-  return (Eigen::Matrix3<T>() << c, T(0), -s, T(0), T(1), T(0), s, T(0), c).finished();
-}
-
-template<typename T>
-inline Eigen::Matrix3<T> RotZ(T theta)
-{
-  T s = sin(theta), c = cos(theta);
-  return (Eigen::Matrix3<T>() << c, s, T(0), -s, c, T(0), T(0), T(0), T(1)).finished();
-}
-
-template<typename T>
-Eigen::Matrix3<T> rpyToMat(const T & r, const T & p, const T & y)
-{
-  return RotX<T>(r) * RotY<T>(p) * RotZ<T>(y);
-}
-
-struct PitchZCostFunctor
-{
-  PitchZCostFunctor(const sva::PTransformd& X_s_p, const sva::PTransformd & X_0_b, const sva::PTransformd & X_b_s)
-  : X_s_p_(X_s_p), X_0_b_(X_0_b), X_b_s_(X_b_s)
-  {
-  }
-
-  template<typename T>
-  bool operator()(const T * const pitch, const T * const t_z, T * residual)
-      const
-  {
-    sva::PTransform<T> X_0_b = X_0_b_;
-    sva::PTransform<T> X_b_b(RotY(pitch[0]), Eigen::Vector3<T>(T(0), T(0), t_z[0]));
-    sva::PTransform<T> X_b_s = X_b_s_;
-    sva::PTransform<T> X_s_p = X_s_p_;
-
-    sva::PTransform<T> X_0_p = (X_s_p * X_b_s * X_b_b * X_0_b);
-
-    residual[0] = X_0_p.translation().z();
-
-    return true;
-  }
-
-  // Factory to hide the construction of the CostFunction object from the client code.
-  static ceres::CostFunction* Create(const sva::PTransformd& X_s_p, const sva::PTransformd & X_0_b, const sva::PTransformd & X_b_s)
-  {
-    return (new ceres::AutoDiffCostFunction<PitchZCostFunctor, 1, 1, 1>(new PitchZCostFunctor(X_s_p, X_0_b, X_b_s)));
-  }
-
-private:
-  const sva::PTransformd X_s_p_;
-  const sva::PTransformd X_0_b_;
-  const sva::PTransformd X_b_s_;
-};
-
-struct Minimize
-{
-  template<typename T>
-  bool operator()(const T * const x, T * residual) const
-  {
-    residual[0] = x[0];
-    return true;
-  }
-};
-
-}
 
 namespace lipm_walking
 {
 
-CameraSensor::CameraSensor(const std::string & type, double dt)
-: mc_observers::Observer(type, dt)
-{
-}
+CameraSensor::CameraSensor(const std::string & type, double dt) : mc_observers::Observer(type, dt) {}
 
 void CameraSensor::configure(const mc_control::MCController & ctl, const mc_rtc::Configuration & config)
 {
+  data_ = CameraSensorShared::get(name_.c_str());
+  if(data_->client.isAlive())
+  {
+    mc_rtc::log::error_and_throw("[CameraSensor::{}] Previous client (pid: {}) is still alive", name_,
+                                 data_->client.pid);
+  }
+  data_->newClient(getpid());
+  if(!data_->server.isAlive())
+  {
+    mc_rtc::log::critical("[CameraSensor::{}] Server is not running yet?", name_);
+  }
   robot_name_ = config("robot", ctl.robot().name());
-
-  if(config.has("camera_serial"))
-  {
-    // camera_serial_ = static_cast<std::string>(config("camera_serial"));
-    camera_serial_ = std::to_string(static_cast<unsigned long int>(static_cast<double>(config("camera_serial"))));
-  }
-  else
-  {
-    mc_rtc::log::error_and_throw<std::invalid_argument>("[CameraSensor::{}] 'camera_serial' is mandatory in the configuration.", name_);
-  }
 
   if(config.has("sensor_name"))
   {
@@ -126,7 +34,8 @@ void CameraSensor::configure(const mc_control::MCController & ctl, const mc_rtc:
   }
   else
   {
-    mc_rtc::log::error_and_throw<std::invalid_argument>("[CameraSensor::{}] 'sensor_name' is mandatory in the configuration.", name_);
+    mc_rtc::log::error_and_throw<std::invalid_argument>(
+        "[CameraSensor::{}] 'sensor_name' is mandatory in the configuration.", name_);
   }
 
   if(config.has("desired_state"))
@@ -136,47 +45,14 @@ void CameraSensor::configure(const mc_control::MCController & ctl, const mc_rtc:
   }
   else
   {
-    mc_rtc::log::error_and_throw<std::invalid_argument>("[CameraSensor::{}] 'desired_state' is mandatory in the configuration; it can be 'LeftSwing' or 'RightSwing'", name_);
-  }
-
-  if(config.has("path_to_preset"))
-  {
-    path_to_preset_ = static_cast<std::string>(config("path_to_preset"));
-  }
-
-  if(config.has("kernel_size"))
-  {
-    kernel_size_ = config("kernel_size");
-    kernel_size_ = kernel_size_ < 3 ? 3 : kernel_size_;
-  }
-
-  if(config.has("kernel_threshold"))
-  {
-    kernel_threshold_ = static_cast<float>(static_cast<double>(config("kernel_threshold")));
-    kernel_threshold_ = kernel_threshold_ < 0 ? 0.005f : kernel_threshold_;
-  }
-
-  if(config.has("outlier_threshold"))
-  {
-    outlier_threshold_ = static_cast<float>(static_cast<double>(config("outlier_threshold")));
-    outlier_threshold_ = outlier_threshold_ < 0 ? 0.01f : outlier_threshold_;
-  }
-
-  if(config.has("path_to_replay_data"))
-  {
-    path_to_replay_data_ = static_cast<std::string>(config("path_to_replay_data"));
+    mc_rtc::log::error_and_throw<std::invalid_argument>(
+        "[CameraSensor::{}] 'desired_state' is mandatory in the configuration; it can be 'LeftSwing' or 'RightSwing'",
+        name_);
   }
 
   mc_rtc::log::info("[CameraSensor::{}] 'sensor_name' is {}", name_, sensor_name_);
-  mc_rtc::log::info("[CameraSensor::{}] 'camera_serial' is {}", name_, camera_serial_);
-  mc_rtc::log::info("[CameraSensor::{}] 'path_to_preset' is {}", name_, path_to_preset_);
-  mc_rtc::log::info("[CameraSensor::{}] 'kernel_size' is {}", name_, kernel_size_);
-  mc_rtc::log::info("[CameraSensor::{}] 'kernel_threshold' is {}", name_, kernel_threshold_);
-  mc_rtc::log::info("[CameraSensor::{}] 'outlier_threshold' is {}", name_, outlier_threshold_);
 
-  startReadingCamera();
-
-  desc_ = fmt::format("{} (sensor_name={}, camera_serial={}, kernel_size={}, kernel_threshold={}, outlier_threshold={})", name_, sensor_name_, camera_serial_, kernel_size_, kernel_threshold_, outlier_threshold_);
+  desc_ = fmt::format("{} (sensor_name={})", name_, sensor_name_);
 }
 
 void CameraSensor::reset(const mc_control::MCController & ctl)
@@ -196,454 +72,364 @@ bool CameraSensor::run(const mc_control::MCController &)
   return true;
 }
 
+void CameraSensor::updateServerOnline()
+{
+  bool was_online = serverOnline_;
+  serverOnline_ = data_->server.isAlive();
+  if(serverOnline_ && !was_online)
+  {
+    mc_rtc::log::success("[CameraSensor::{}] Server is back online", name_);
+  }
+  if(!serverOnline_ && was_online)
+  {
+    lastServerOfflineMessage_t_ = t_;
+    mc_rtc::log::critical("[CameraSensor::{}] Server is offline", name_);
+  }
+  if(!serverOnline_ && t_ > lastServerOfflineMessage_t_ + 1.0)
+  {
+    lastServerOfflineMessage_t_ = t_;
+    mc_rtc::log::critical("[CameraSensor::{}] Server is still offline", name_);
+  }
+}
+
 void CameraSensor::update(mc_control::MCController & ctl)
 {
   t_ += ctl.solver().dt();
-  if(new_ground_data_.load())
+  publish_plot(*ctl.gui());
+  updateServerOnline();
+  if(new_ground_data_)
   {
-    const std::lock_guard<std::mutex> lock(estimation_mutex_);
-    if(pc_full_ground_reconstructed_points_)
+    ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+    ground_points_.resize(data_->ground_points.size());
+    for(size_t i = 0; i < data_->ground_points.size(); ++i)
     {
-      if(!pc_full_ground_reconstructed_points_->points_.empty())
-      {
-        ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).update(pc_full_ground_reconstructed_points_->points_, 0.);
-      }
+      ground_points_[i] = data_->ground_points[i];
+    }
+    // std::cout << "data_->aligned_points.size() " << data_->aligned_points.size() << std::endl;
+    aligned_points_.resize(data_->aligned_points.size());
+    for(size_t i = 0; i < data_->aligned_points.size(); ++i)
+    {
+      aligned_points_[i] = data_->aligned_points[i];
+    }
+    selected_points_.resize(data_->selected_points.size());
+    for(size_t i = 0; i < data_->selected_points.size(); ++i)
+    {
+      selected_points_[i] = data_->selected_points[i];
+    }
+    if(!ground_points_.empty())
+    {
+      ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).update(ground_points_, t_);
     }
     new_ground_data_ = false;
   }
 }
 
-void CameraSensor::addToLogger(const mc_control::MCController &,
-                                   mc_rtc::Logger & logger,
-                                   const std::string & category)
+void CameraSensor::publish_plot_data(std::vector<std::array<double, 2>> & points)
 {
-  logger.addLogEntry(category + "_range", [this]() -> double
+  points.reserve(ground_points_.size());
+  for(const auto & p : ground_points_)
   {
-    const std::lock_guard<std::mutex> lock(mutex_);
-    return points_.empty() ? 0. : points_[0].z();
-  });
-  logger.addLogEntry(category + "_camera_points_x", [this]() -> std::vector<double>
-  {
-    const std::lock_guard<std::mutex> lock(mutex_);
-    std::vector<double> d;
-    std::transform(points_.begin(), points_.end(), std::back_inserter(d),
-      [](const Eigen::Vector3d & v) { return v.x(); });
-    return d;
-  });
-  logger.addLogEntry(category + "_camera_points_y", [this]() -> std::vector<double>
-  {
-    const std::lock_guard<std::mutex> lock(mutex_);
-    std::vector<double> d;
-    std::transform(points_.begin(), points_.end(), std::back_inserter(d),
-      [](const Eigen::Vector3d & v) { return v.y(); });
-    return d;
-  });
-  logger.addLogEntry(category + "_camera_points_z", [this]() -> std::vector<double>
-  {
-    const std::lock_guard<std::mutex> lock(mutex_);
-    std::vector<double> d;
-    std::transform(points_.begin(), points_.end(), std::back_inserter(d),
-      [](const Eigen::Vector3d & v) { return v.z(); });
-    return d;
-  });
-
-  logger.addLogEntry(category + "_world_points_x", [this]() -> std::vector<double>
-  {
-    const std::lock_guard<std::mutex> lock(estimation_mutex_);
-    std::vector<double> d;
-    std::transform(ground_points_.begin(), ground_points_.end(), std::back_inserter(d),
-      [](const Eigen::Vector3d & v) { return v.x(); });
-    return d;
-  });
-  logger.addLogEntry(category + "_world_points_y", [this]() -> std::vector<double>
-  {
-    const std::lock_guard<std::mutex> lock(estimation_mutex_);
-    std::vector<double> d;
-    std::transform(ground_points_.begin(), ground_points_.end(), std::back_inserter(d),
-      [](const Eigen::Vector3d & v) { return v.y(); });
-    return d;
-  });
-  logger.addLogEntry(category + "_world_points_z", [this]() -> std::vector<double>
-  {
-    const std::lock_guard<std::mutex> lock(estimation_mutex_);
-    std::vector<double> d;
-    std::transform(ground_points_.begin(), ground_points_.end(), std::back_inserter(d),
-      [](const Eigen::Vector3d & v) { return v.z(); });
-    return d;
-  });
-
-
-  logger.addLogEntry(category + "_world_transformed_points_x", [this]() -> std::vector<double>
-  {
-    const std::lock_guard<std::mutex> lock(estimation_mutex_);
-    std::vector<double> d;
-    if(pc_transformed_estimated_ground_points_)
-    {
-      std::transform(pc_transformed_estimated_ground_points_->points_.begin(), pc_transformed_estimated_ground_points_->points_.end(), std::back_inserter(d),
-        [](const Eigen::Vector3d & v) { return v.x(); });
-    }
-    return d;
-  });
-  logger.addLogEntry(category + "_world_transformed_points_y", [this]() -> std::vector<double>
-  {
-    const std::lock_guard<std::mutex> lock(estimation_mutex_);
-    std::vector<double> d;
-    if(pc_transformed_estimated_ground_points_)
-    {
-      std::transform(pc_transformed_estimated_ground_points_->points_.begin(), pc_transformed_estimated_ground_points_->points_.end(), std::back_inserter(d),
-        [](const Eigen::Vector3d & v) { return v.y(); });
-    }
-    return d;
-  });
-  logger.addLogEntry(category + "_world_transformed_points_z", [this]() -> std::vector<double>
-  {
-    const std::lock_guard<std::mutex> lock(estimation_mutex_);
-    std::vector<double> d;
-    if(pc_transformed_estimated_ground_points_)
-    {
-      std::transform(pc_transformed_estimated_ground_points_->points_.begin(), pc_transformed_estimated_ground_points_->points_.end(), std::back_inserter(d),
-        [](const Eigen::Vector3d & v) { return v.z(); });
-    }
-    return d;
-  });
-
-  logger.addLogEntry(category + "_ground_points_x", [this]() -> std::vector<double>
-  {
-    const std::lock_guard<std::mutex> lock(estimation_mutex_);
-    std::vector<double> d;
-    if(pc_full_ground_reconstructed_points_)
-    {
-      std::transform(pc_full_ground_reconstructed_points_->points_.begin(), pc_full_ground_reconstructed_points_->points_.end(), std::back_inserter(d),
-        [](const Eigen::Vector3d & v) { return v.x(); });
-    }
-    return d;
-  });
-  logger.addLogEntry(category + "_ground_points_y", [this]() -> std::vector<double>
-  {
-    const std::lock_guard<std::mutex> lock(estimation_mutex_);
-    std::vector<double> d;
-    if(pc_full_ground_reconstructed_points_)
-    {
-      std::transform(pc_full_ground_reconstructed_points_->points_.begin(), pc_full_ground_reconstructed_points_->points_.end(), std::back_inserter(d),
-        [](const Eigen::Vector3d & v) { return v.y(); });
-    }
-    return d;
-  });
-  logger.addLogEntry(category + "_ground_points_z", [this]() -> std::vector<double>
-  {
-    const std::lock_guard<std::mutex> lock(estimation_mutex_);
-    std::vector<double> d;
-    if(pc_full_ground_reconstructed_points_)
-    {
-      std::transform(pc_full_ground_reconstructed_points_->points_.begin(), pc_full_ground_reconstructed_points_->points_.end(), std::back_inserter(d),
-        [](const Eigen::Vector3d & v) { return v.z(); });
-    }
-    return d;
-  });
+    points.push_back({p.x(), p.z()});
+  }
 }
 
-void CameraSensor::removeFromLogger(mc_rtc::Logger & logger, const std::string & category)
+void CameraSensor::addToLogger(const mc_control::MCController &, mc_rtc::Logger & logger, const std::string & category)
 {
-  logger.removeLogEntry(category + "_range");
-  logger.removeLogEntry(category + "_points_x");
-  logger.removeLogEntry(category + "_points_y");
-  logger.removeLogEntry(category + "_points_z");
+  MC_RTC_LOG_HELPER(category + "_online", serverOnline_);
+  logger.addLogEntry(category + "_range", this, [this]() -> double { return points_.empty() ? 0. : points_[0].z(); });
+  logger.addLogEntry(category + "_camera_points_x", this,
+                     [this]() -> std::vector<double>
+                     {
+                       std::vector<double> d;
+                       std::transform(points_.begin(), points_.end(), std::back_inserter(d),
+                                      [](const Eigen::Vector3d & v) { return v.x(); });
+                       return d;
+                     });
+  logger.addLogEntry(category + "_camera_points_y", this,
+                     [this]() -> std::vector<double>
+                     {
+                       std::vector<double> d;
+                       std::transform(points_.begin(), points_.end(), std::back_inserter(d),
+                                      [](const Eigen::Vector3d & v) { return v.y(); });
+                       return d;
+                     });
+  logger.addLogEntry(category + "_camera_points_z", this,
+                     [this]() -> std::vector<double>
+                     {
+                       std::vector<double> d;
+                       std::transform(points_.begin(), points_.end(), std::back_inserter(d),
+                                      [](const Eigen::Vector3d & v) { return v.z(); });
+                       return d;
+                     });
+  logger.addLogEntry(category + "_ground_points_x", this,
+                     [this]() -> std::vector<double>
+                     {
+                       std::vector<double> d;
+                       std::transform(ground_points_.begin(), ground_points_.end(), std::back_inserter(d),
+                                      [](const Eigen::Vector3d & v) { return v.x(); });
+                       return d;
+                     });
+  logger.addLogEntry(category + "_ground_points_y", this,
+                     [this]() -> std::vector<double>
+                     {
+                       std::vector<double> d;
+                       std::transform(ground_points_.begin(), ground_points_.end(), std::back_inserter(d),
+                                      [](const Eigen::Vector3d & v) { return v.y(); });
+                       return d;
+                     });
+  logger.addLogEntry(category + "_ground_points_z", this,
+                     [this]() -> std::vector<double>
+                     {
+                       std::vector<double> d;
+                       std::transform(ground_points_.begin(), ground_points_.end(), std::back_inserter(d),
+                                      [](const Eigen::Vector3d & v) { return v.z(); });
+                       return d;
+                     });
+  logger.addLogEntry(category + "_world_points_x", this,
+                     [this]() -> std::vector<double>
+                     {
+                       std::vector<double> d;
+                       std::transform(points_.begin(), points_.end(), std::back_inserter(d),
+                                      [this](const Eigen::Vector3d & v)
+                                      {
+                                        const sva::PTransformd X_s_p(v);
+                                        const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * data_->X_0_b;
+                                        return X_0_p.translation().x();
+                                      });
+                       return d;
+                     });
+  logger.addLogEntry(category + "_world_points_y", this,
+                     [this]() -> std::vector<double>
+                     {
+                       std::vector<double> d;
+                       std::transform(points_.begin(), points_.end(), std::back_inserter(d),
+                                      [this](const Eigen::Vector3d & v)
+                                      {
+                                        const sva::PTransformd X_s_p(v);
+                                        const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * data_->X_0_b;
+                                        return X_0_p.translation().y();
+                                      });
+                       return d;
+                     });
+  logger.addLogEntry(category + "_world_points_z", this,
+                     [this]() -> std::vector<double>
+                     {
+                       std::vector<double> d;
+                       std::transform(points_.begin(), points_.end(), std::back_inserter(d),
+                                      [this](const Eigen::Vector3d & v)
+                                      {
+                                        const sva::PTransformd X_s_p(v);
+                                        const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * data_->X_0_b;
+                                        return X_0_p.translation().z();
+                                      });
+                       return d;
+                     });
+}
+
+void CameraSensor::removeFromLogger(mc_rtc::Logger & logger, const std::string &)
+{
+  logger.removeLogEntries(this);
 }
 
 void CameraSensor::addToGUI(const mc_control::MCController & ctl,
-                                mc_rtc::gui::StateBuilder & gui,
-                                const std::vector<std::string> & category)
+                            mc_rtc::gui::StateBuilder & gui,
+                            const std::vector<std::string> & category)
 {
-  gui.addElement(category,
-    mc_rtc::gui::Label("Frame acquistion [ms]",
-      [this]()
-      {
-        const std::lock_guard<std::mutex> lock(mutex_);
-        return camera_duration_;
-      }),
-    mc_rtc::gui::Label("Ground reconstruction [ms]",
-      [this]()
-      {
-        const std::lock_guard<std::mutex> lock(estimation_mutex_);
-        return ground_reconstruction_duration_;
-      }),
-    mc_rtc::gui::Label("Range [m]",
-      [this]()
-      {
-        const std::lock_guard<std::mutex> lock(mutex_);
-        return points_.empty() ? 0. : points_[0].z();
-      }),
-    mc_rtc::gui::Point3D("Point [3D]",
-      [this]()
-      {
-        const std::lock_guard<std::mutex> lock(mutex_);
-        return points_.empty() ? Eigen::Vector3d::Zero() : points_[0];
-      }),
-    mc_rtc::gui::Label("nr points",
-      [this]()
-      {
-        const std::lock_guard<std::mutex> lock(mutex_);
-        return points_.size();
-      }),
-    mc_rtc::gui::Transform(fmt::format("X_0_{}", name_),
-      [this, &ctl]()
-      {
-        const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).parent();
-        const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
-        return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s() * X_0_p;
-      }),
-    mc_rtc::gui::ArrayInput("Rotation [deg]", {"r", "p", "y"},
-      [this, &ctl]() -> Eigen::Vector3d
-      {
-        return mc_rbdyn::rpyFromMat(ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s().rotation()).unaryExpr([](double x){return x * 180. / M_PI;});
-      },
-      [this, &ctl](const Eigen::Vector3d & new_rpy)
-      {
-        const sva::PTransformd current_X_p_s = ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s();
-        const sva::PTransformd new_X_p_s(mc_rbdyn::rpyToMat(new_rpy.unaryExpr([](double x){return x * M_PI / 180.;})), current_X_p_s.translation());
-        const_cast<mc_control::MCController &>(ctl).robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s(new_X_p_s);
-      }),
-    mc_rtc::gui::ArrayInput("Translation", {"x", "y", "z"},
-      [this, &ctl]()
-      {
-        return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s().translation();
-      },
-      [this, &ctl](const Eigen::Vector3d & new_translation)
-      {
-        const sva::PTransformd current_X_p_s = ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s();
-        const sva::PTransformd new_X_p_s(current_X_p_s.rotation(), new_translation);
-        const_cast<mc_control::MCController &>(ctl).robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s(new_X_p_s);
-      }),
-    mc_rtc::gui::Transform("X_p_s",
-      [this, &ctl]()
-      {
-        const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).parent();
-        const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
-        return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s() * X_0_p;
-      },
-      [this, &ctl](const sva::PTransformd & X_0_s)
-      {
-        const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).parent();
-        const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
-        const sva::PTransformd new_X_p_s = X_0_s * X_0_p.inv();
-        const_cast<mc_control::MCController &>(ctl).robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s(new_X_p_s);
-      })
-  );
+  gui.addElement(
+      category,
+      mc_rtc::gui::Checkbox(
+          "Online", [this]() { return serverOnline_; }, []() {}),
+      mc_rtc::gui::Button("Reset ground",
+                          [this]()
+                          {
+                            ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+                            data_->reset_ground = true;
+                            ground_points_.clear();
+                          }),
+      mc_rtc::gui::Button("Show ground profile",
+                          [this]()
+                          {
+                            if(publish_plot_ || published_plot_)
+                            {
+                              mc_rtc::log::warning("Already publishing");
+                            }
+                            publish_plot_ = true;
+                          }),
+      mc_rtc::gui::Label("Range [m]", [this]() { return points_.empty() ? 0. : points_[0].z(); }),
+      mc_rtc::gui::Point3D("Point [3D]", [this]() { return points_.empty() ? Eigen::Vector3d::Zero() : points_[0]; }),
+      mc_rtc::gui::Label("nr points", [this]() { return points_.size(); }),
+      mc_rtc::gui::Transform(fmt::format("X_0_{}", name_),
+                             [this, &ctl]()
+                             {
+                               const std::string & body_name =
+                                   ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).parent();
+                               const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
+                               return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s()
+                                      * X_0_p;
+                             }),
+      mc_rtc::gui::ArrayInput(
+          "Rotation [deg]", {"r", "p", "y"},
+          [this, &ctl]() -> Eigen::Vector3d
+          {
+            return mc_rbdyn::rpyFromMat(
+                       ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s().rotation())
+                .unaryExpr([](double x) { return x * 180. / M_PI; });
+          },
+          [this, &ctl](const Eigen::Vector3d & new_rpy)
+          {
+            const sva::PTransformd current_X_p_s =
+                ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s();
+            const sva::PTransformd new_X_p_s(
+                mc_rbdyn::rpyToMat(new_rpy.unaryExpr([](double x) { return x * M_PI / 180.; })),
+                current_X_p_s.translation());
+            const_cast<mc_control::MCController &>(ctl)
+                .robot(robot_name_)
+                .device<mc_mujoco::RangeSensor>(sensor_name_)
+                .X_p_s(new_X_p_s);
+          }),
+      mc_rtc::gui::ArrayInput(
+          "Translation", {"x", "y", "z"},
+          [this, &ctl]()
+          { return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s().translation(); },
+          [this, &ctl](const Eigen::Vector3d & new_translation)
+          {
+            const sva::PTransformd current_X_p_s =
+                ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s();
+            const sva::PTransformd new_X_p_s(current_X_p_s.rotation(), new_translation);
+            const_cast<mc_control::MCController &>(ctl)
+                .robot(robot_name_)
+                .device<mc_mujoco::RangeSensor>(sensor_name_)
+                .X_p_s(new_X_p_s);
+          }),
+      mc_rtc::gui::Transform(
+          "X_p_s",
+          [this, &ctl]()
+          {
+            const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).parent();
+            const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
+            return ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s() * X_0_p;
+          },
+          [this, &ctl](const sva::PTransformd & X_0_s)
+          {
+            const std::string & body_name = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).parent();
+            const sva::PTransformd X_0_p = ctl.realRobot().bodyPosW(body_name);
+            const sva::PTransformd new_X_p_s = X_0_s * X_0_p.inv();
+            const_cast<mc_control::MCController &>(ctl)
+                .robot(robot_name_)
+                .device<mc_mujoco::RangeSensor>(sensor_name_)
+                .X_p_s(new_X_p_s);
+          }));
 
   std::vector<std::string> points_category = category;
   points_category.push_back("points");
-  gui.addElement(points_category,
-    mc_rtc::gui::Trajectory("Ground points", mc_rtc::gui::Color::Green,
-      [this, &ctl]()
-      {
-        std::vector<Eigen::Vector3d> points;
-        {
-          const std::lock_guard<std::mutex> lock(mutex_);
-          points = ground_points_;
-        }
+  // gui.addElement(
+  //     points_category,
+  //     mc_rtc::gui::Trajectory("Points",
+  //                             [this, &ctl]()
+  //                             {
+  //                               std::vector<Eigen::Vector3d> points;
+  //                               {
+  //                                 points = points_;
+  //                               }
 
-        if(points.empty())
-        {
-          return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
-        }
+  //                               if(points.empty())
+  //                               {
+  //                                 return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
+  //                               }
 
-        return points;
-      })
-  );
+  //                               const std::string & body_of_sensor =
+  //                                   ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).parent();
+  //                               // Access the position of body name in world coordinates (phalanx position)
+  //                               sva::PTransformd X_0_ph = ctl.realRobot().bodyPosW(body_of_sensor);
+  //                               // Returns the transformation from the parent body to the sensor
+  //                               const sva::PTransformd & X_ph_s =
+  //                                   ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s();
+  //                               // Keep the estimated 3d point for the ground
+  //                               std::vector<Eigen::Vector3d> traj;
+  //                               for(const auto & point : points)
+  //                               {
+  //                                 const sva::PTransformd X_0_m = sva::PTransformd(point) * X_ph_s * X_0_ph;
+  //                                 traj.push_back(X_0_m.translation());
+  //                               }
+  //                               return traj;
+  //                             }));
 
-  gui.addElement(points_category,
-    mc_rtc::gui::Trajectory("Ground reconstructed",
-      [this, &ctl]()
-      {
-        std::vector<Eigen::Vector3d> points;
-        {
-          const std::lock_guard<std::mutex> lock(estimation_mutex_);
-          if(pc_full_ground_reconstructed_points_)
-          {
-            points = pc_full_ground_reconstructed_points_->points_;
-          }
-        }
+  gui.addElement(
+      points_category,
+      mc_rtc::gui::Trajectory("Ground reconstructed",
+                              {mc_rtc::gui::Color::Magenta},
+                              [this, &ctl]()
+                              {
+                                std::vector<Eigen::Vector3d> points;
+                                {
+                                  ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+                                  points = ground_points_;
+                                }
 
-        if(points.empty())
-        {
-          return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
-        }
+                                if(points.empty())
+                                {
+                                  return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
+                                }
 
-        return points;
-      })
-  );
+                                return points;
+                              }));
+  gui.addElement(
+      points_category,
+      mc_rtc::gui::Trajectory("Selected points to align",
+                              {mc_rtc::gui::Color::Blue},
+                              [this, &ctl]()
+                              {
+                                std::vector<Eigen::Vector3d> points;
+                                {
+                                  ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+                                  points = selected_points_;
+                                }
 
-  gui.addPlot(
-    fmt::format("CameraSensor::{}", name_),
-    mc_rtc::gui::plot::X("t", [this, &ctl]() { return t_; }),
-    mc_rtc::gui::plot::Y("range", [this]()
-      {
-        const std::lock_guard<std::mutex> lock(mutex_);
-        return points_.empty() ? 0. : points_[0].z();
-      }, mc_rtc::gui::Color::Red)
-  );
+                                if(points.empty())
+                                {
+                                  return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
+                                }
+
+                                return points;
+                              }));
+
+  gui.addElement(
+      points_category,
+      mc_rtc::gui::Trajectory("Align points with picth and t_z",
+                              {mc_rtc::gui::Color::Gray},
+                              [this, &ctl]()
+                              {
+                                std::vector<Eigen::Vector3d> points;
+                                {
+                                  ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+                                  points = aligned_points_;
+                                }
+
+                                if(points.empty())
+                                {
+                                  return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
+                                }
+
+                                return points;
+                              }));
 }
 
-void CameraSensor::startReadingCamera()
+void CameraSensor::publish_plot(mc_rtc::gui::StateBuilder & gui)
 {
-  if(loop_sensor_.joinable())
+  auto plot_name = [this]() { return fmt::format("CameraSensor::{}::GroundProfile", name_); };
+  if(published_plot_)
   {
-    loop_sensor_.join();
+    published_plot_ = false;
+    gui.removePlot(plot_name());
   }
-
-  loop_sensor_ = std::thread(
-    [this]()
-    {
-      rs2::config cfg;
-      // Check if we read from a .bag or from a camera
-      if(path_to_replay_data_ != "")
-      {
-        mc_rtc::log::info("[CameraSensor] We will use the recorded depth at {}", path_to_replay_data_);
-        cfg.enable_device_from_file(path_to_replay_data_);
-      }
-      else
-      {
-        cfg.enable_device(camera_serial_);
-      }
-
-      // Declare RealSense pipeline, encapsulating the actual device and sensors
-      rs2::pipeline pipe;
-      //
-      auto prof = pipe.start(cfg);
-
-      // Load preset
-      if(!path_to_preset_.empty())
-      {
-        std::ifstream t(path_to_preset_);
-        std::string str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
-        rs2::device dev = prof.get_device();
-        auto advanced = dev.as<rs400::advanced_mode>();
-        advanced.load_json(str);
-      }
-
-      auto depthToPoint = [](const rs2_intrinsics& intrinsics, const std::array<float, 2>& pixel, float depth) -> Eigen::Vector3d
-      {
-        Eigen::Vector3f point;
-        rs2_deproject_pixel_to_point(point.data(), &intrinsics, pixel.data(), depth);
-        return point.cast<double>();
-      };
-
-      auto applyKernel = [this](const std::array<float, 2>& pixel, const rs2::depth_frame& frame) -> float
-      {
-        const float pixel_depth = frame.get_distance(static_cast<int>(pixel[0]), static_cast<int>(pixel[1]));
-        float sum_depth = 0.f;
-        float counter = 0.f;
-        const int half_kernel_size = static_cast<int>(kernel_size_/2);
-        for(int i = -half_kernel_size; i < half_kernel_size; ++i)
-        {
-          for(int j = -half_kernel_size; j < half_kernel_size; ++j)
-          {
-            const std::array<float, 2> ppixel = {pixel[0] + static_cast<float>(i), pixel[1] + static_cast<float>(j)};
-            const float ddepth = frame.get_distance(static_cast<int>(ppixel[0]), static_cast<int>(ppixel[1]));
-            if(std::abs(ddepth - pixel_depth) < kernel_threshold_)
-            {
-              sum_depth += ddepth;
-              counter += 1.f;
-            }
-          }
-        }
-        return sum_depth / counter;
-      };
-
-      auto generateStatistics = [](double& mean, double& variance, double& stddev, const std::vector<double>& distances)
-      {
-        // Estimate the mean and the standard deviation of the distance vector
-        double sum = 0, sq_sum = 0;
-        for (const float &distance : distances)
-        {
-          sum += distance;
-          sq_sum += distance * distance;
-        }
-
-        mean = sum / static_cast<double>(distances.size());
-        variance = (sq_sum - sum * sum / static_cast<double>(distances.size())) / (static_cast<double>(distances.size()) - 1);
-        stddev = sqrt (variance);
-      };
-
-
-      // Decimation filter reduces the amount of data (while preserving best samples)
-      rs2::decimation_filter dec;
-      // If the demo is too slow, make sure you run in Release (-DCMAKE_BUILD_TYPE=Release)
-      // but you can also increase the following parameter to decimate depth more (reducing quality)
-      dec.set_option(RS2_OPTION_FILTER_MAGNITUDE, 4);
-      // HDR Merge
-      rs2::hdr_merge hdr;
-      // Threshold filter
-      rs2::threshold_filter thresh(0.5f, 0.40f);
-      // Define transformations from and to Disparity domain
-      rs2::disparity_transform depth2disparity;
-      // Define spatial filter (edge-preserving)
-      rs2::spatial_filter spat;
-      spat.set_option(RS2_OPTION_FILTER_MAGNITUDE, 2.f);
-      spat.set_option(RS2_OPTION_FILTER_SMOOTH_ALPHA, 0.5f);
-      spat.set_option(RS2_OPTION_FILTER_SMOOTH_DELTA, 20.f);
-      spat.set_option(RS2_OPTION_HOLES_FILL, 0);
-      rs2::disparity_transform disparity2depth(false);
-
-      while(!stop_loop_.load())
-      {
-        auto frames = pipe.wait_for_frames();
-        auto start = std::chrono::high_resolution_clock::now();
-
-        // Get depth frame
-        auto frame = frames.get_depth_frame();
-        frame = frame.apply_filter(dec);
-        frame = frame.apply_filter(hdr);
-        frame = frame.apply_filter(thresh);
-        frame = frame.apply_filter(depth2disparity);
-        frame = frame.apply_filter(spat);
-        frame = frame.apply_filter(disparity2depth);
-
-        const rs2_intrinsics intrinsics = frame.get_profile().as<rs2::video_stream_profile>().get_intrinsics();
-
-        const size_t height = frame.get_height();
-        const size_t width = frame.get_width();
-
-        const size_t half_height = static_cast<size_t>(static_cast<double>(height) * 0.5);
-        const size_t half_width = static_cast<size_t>(static_cast<double>(width) * 0.5);
-
-        std::array<float, 2> pixel;
-        const int half_kernel_size = static_cast<int>(kernel_size_/2);
-        std::vector<Eigen::Vector3d> points;
-        const int offset = 20;
-        for(size_t i = half_height + half_kernel_size; i < height - half_kernel_size - offset; ++i)
-        {
-          pixel[0] = static_cast<float>(i);
-          pixel[1] = static_cast<float>(half_height);
-
-          const float depth = applyKernel(pixel, frame);
-          Eigen::Vector3d point = depthToPoint(intrinsics, pixel, depth);
-          if(point.z() != 0 && point.x() < 0.05 && point.z() < 0.30)
-          {
-            point.y() = 0.;
-            points.push_back(point);
-          }
-        }
-
-        // Sort
-        std::sort(points.begin(), points.end(), [](const Eigen::Vector3d& a, const Eigen::Vector3d& b) { return a.x() < b.x(); });
-
-        {
-          const std::lock_guard<std::mutex> lock(mutex_);
-          points_ = points;
-        }
-
-        // Needs to update
-        new_camera_data_ = true;
-
-        auto stop = std::chrono::high_resolution_clock::now();
-        {
-          const std::lock_guard<std::mutex> lock(mutex_);
-          camera_duration_ = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count();
-        }
-      }
-    }
-  );
+  if(publish_plot_)
+  {
+    gui.addXYPlot(plot_name(),
+                  mc_rtc::gui::plot::XYChunk(
+                      "profile", [this](auto & points) { publish_plot_data(points); }, mc_rtc::gui::Color::Red));
+    publish_plot_ = false;
+    published_plot_ = true;
+  }
 }
 
 void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
@@ -654,144 +440,60 @@ void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
   }
 
   estimation_loop_ = std::thread(
-    [this, &ctl]()
-    {
-      // Return the parent body of the sensor (phalanx)
-      const std::string& body_of_sensor = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).parent();
-      const sva::PTransformd& X_b_s = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s();
-
-      //
+      [this, &ctl]()
       {
-        const std::lock_guard<std::mutex> lock(estimation_mutex_);
-        pc_estimated_ground_points_ = std::make_shared<open3d::geometry::PointCloud>();
-        pc_transformed_estimated_ground_points_ = std::make_shared<open3d::geometry::PointCloud>();
-        pc_full_ground_reconstructed_points_ = std::make_shared<open3d::geometry::PointCloud>();
-      }
+        // Return the parent body of the sensor (phalanx)
+        const std::string & body_of_sensor = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).parent();
+        data_->X_b_s = ctl.robot().device<mc_mujoco::RangeSensor>(sensor_name_).X_p_s();
 
-      while(!stop_loop_.load())
-      {
-         // Wait until main() sends data
-        std::unique_lock lk(start_estimation_mutex_);
-        estimation_condition_.wait(lk, [this]{return new_camera_data_.load();});
-
-        // Get fz from the foot
-        const double fz = ctl.robot().bodyForceSensor(body_of_sensor).force().z();
-        if(ctl.datastore().has("SoftFootState::GetState"))
+        while(!stop_loop_.load())
         {
-          const std::string state = ctl.datastore().call<std::string>("SoftFootState::GetState");
-          if(state != desired_state_)
+          while(data_->server.isAlive())
           {
-            continue;
-          }
-        }
-        else
-        {
-          continue;
-        }
-
-        std::vector<Eigen::Vector3d> new_camera_points;
-        {
-          const std::lock_guard<std::mutex> lock(mutex_);
-          new_camera_points = points_;
-        }
-
-        // Access the position of body name in world coordinates (phalanx position)
-        auto start = std::chrono::high_resolution_clock::now();
-        const auto& X_0_b = ctl.realRobot().bodyPosW(body_of_sensor);
-
-        {
-          ceres::Problem problem;
-          double pitch = 0.;
-          double t_z = 0.;
-          {
-            const std::lock_guard<std::mutex> lock(estimation_mutex_);
-            ground_points_.clear();
-            for(const auto& point: new_camera_points)
+            ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->mtx);
+            if(data_->data_ready->timed_wait(lck, pclock::universal_time() + ptime::seconds(1)))
             {
-              const sva::PTransformd X_0_p = sva::PTransformd(point) * X_b_s * X_0_b;
-              ground_points_.push_back(X_0_p.translation());
-              const sva::PTransformd X_s_p(point);
-              ceres::CostFunction* cost_function = PitchZCostFunctor::Create(X_s_p, X_0_b, X_b_s);
-              problem.AddResidualBlock(cost_function,  new ceres::CauchyLoss(0.5), &pitch, &t_z);
+               {
+                ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+                // std::cout << "Getting data from the server " << std::endl;
+                points_.resize(data_->points.size());
+                // std::cout << "New points with size of " << points_.size() << std::endl;
+                for(size_t i = 0; i < data_->points.size(); ++i)
+                {
+                  points_[i] = data_->points[i];
+                }
+              }
+              data_->skip = false;
+              if(ctl.datastore().has("SoftFootState::GetState"))
+              {
+                const std::string state = ctl.datastore().call<std::string>("SoftFootState::GetState");
+                if(!(state == desired_state_ || state == "DoubleSupport"))
+                {
+                  data_->skip = true;
+                }
+              }
+              else
+              {
+                data_->skip = true;
+              }
+            }
+            if(data_->skip)
+            {
+              data_->compute_ready->notify_all();
+              continue;
+            }
+            data_->fz = ctl.robot().bodyForceSensor(body_of_sensor).force().z();
+            data_->X_0_b = ctl.realRobot().bodyPosW(body_of_sensor);
+            data_->compute_ready->notify_all();
+            if(data_->result_ready->timed_wait(lck, pclock::universal_time() + ptime::seconds(1)))
+            {
+              new_ground_data_ = true;
             }
           }
-          ceres::CostFunction * min_p = new ceres::AutoDiffCostFunction<Minimize, 1, 1>(new Minimize());
-          problem.AddResidualBlock(min_p, nullptr, &pitch);
-          ceres::CostFunction * min_z = new ceres::AutoDiffCostFunction<Minimize, 1, 1>(new Minimize());
-          problem.AddResidualBlock(min_z, nullptr, &t_z);
-
-          ceres::Solver::Options options;
-          options.linear_solver_type = ceres::DENSE_QR;
-          ceres::Solver::Summary summary;
-          ceres::Solve(options, &problem, &summary);
-
-          const sva::PTransformd X_b_b(sva::RotY(pitch).cast<double>(), Eigen::Vector3d(0., 0., t_z));
-
-          // Compute the 3D point in world frame
-          {
-            const std::lock_guard<std::mutex> lock(estimation_mutex_);
-            corrected_ground_points_.clear();
-            for(const auto& point: new_camera_points)
-            {
-              // From camera frame to world frame
-              const sva::PTransformd X_s_p(point);
-              const sva::PTransformd X_0_p = X_s_p * X_b_s * X_b_b * X_0_b;
-              corrected_ground_points_.push_back(X_0_p.translation());
-            }
-          }
+          data_->client_idle.notify_all();
+          std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
-
-        try
-        {
-          {
-            const std::lock_guard<std::mutex> lock(estimation_mutex_);
-            pc_estimated_ground_points_->points_ = corrected_ground_points_;
-          }
-
-          if(pc_full_ground_reconstructed_points_->points_.empty())
-          {
-            const std::lock_guard<std::mutex> lock(estimation_mutex_);
-            *pc_full_ground_reconstructed_points_ = *pc_estimated_ground_points_;
-            continue;
-          }
-
-          {
-            const std::lock_guard<std::mutex> lock(estimation_mutex_);
-            pc_estimated_ground_points_ = pc_estimated_ground_points_->VoxelDownSample(0.005);
-          }
-
-          const auto front = Eigen::Vector3d(X_0_b.translation().x() + 0.0, X_0_b.translation().y() - 0.05, -0.04);
-          const auto back = Eigen::Vector3d(Eigen::Vector3d(X_0_b.translation().x() + 0.55, X_0_b.translation().y() + 0.05, 0.04));
-          std::shared_ptr<open3d::geometry::PointCloud> pc_ground_points_cropped(new open3d::geometry::PointCloud);
-          *pc_ground_points_cropped = *pc_full_ground_reconstructed_points_;
-          pc_ground_points_cropped = pc_ground_points_cropped->Crop(open3d::geometry::AxisAlignedBoundingBox(front, back));
-
-          // ICP For matching
-          auto result = open3d::pipelines::registration::RegistrationGeneralizedICP(
-              *pc_estimated_ground_points_, *pc_ground_points_cropped, 0.05, Eigen::Matrix4d::Identity(),
-              open3d::pipelines::registration::TransformationEstimationForGeneralizedICP(),
-              open3d::pipelines::registration::ICPConvergenceCriteria(1e-6, 1e-6, 15));
-
-          // Apply transformation
-          {
-            const std::lock_guard<std::mutex> lock(estimation_mutex_);
-            *pc_transformed_estimated_ground_points_ = *pc_estimated_ground_points_;
-            pc_transformed_estimated_ground_points_->Transform(result.transformation_);
-            *pc_full_ground_reconstructed_points_ += *pc_transformed_estimated_ground_points_;
-            pc_full_ground_reconstructed_points_ = pc_full_ground_reconstructed_points_->VoxelDownSample(0.005);
-            std::sort(pc_full_ground_reconstructed_points_->points_.begin(), pc_full_ground_reconstructed_points_->points_.end(), [](const Eigen::Vector3d& a, const Eigen::Vector3d& b) { return a.x() < b.x(); });
-            new_ground_data_ = true;
-          }
-        }
-        catch (const std::runtime_error& e)
-        {
-          std::cout << e.what() << std::endl;
-        }
-        auto stop = std::chrono::high_resolution_clock::now();
-        ground_reconstruction_duration_ = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
-      }
-    }
-  );
+      });
 }
 
 } // namespace lipm_walking

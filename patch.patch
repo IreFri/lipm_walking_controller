@@ -1,0 +1,284 @@
+diff --git a/include/lipm_walking/observer/CameraSensor.h b/include/lipm_walking/observer/CameraSensor.h
+index ebf445c..2b5bc4c 100644
+--- a/include/lipm_walking/observer/CameraSensor.h
++++ b/include/lipm_walking/observer/CameraSensor.h
+@@ -84,6 +84,7 @@ protected:
+   std::atomic<bool> new_ground_data_{false};
+   std::mutex points_mtx_;
+   std::vector<Eigen::Vector3d> points_;
++  std::vector<Eigen::Vector3d> ground_points_;
+
+   void updateServerOnline();
+ };
+diff --git a/include/lipm_walking/observer/CameraSensorShared.h b/include/lipm_walking/observer/CameraSensorShared.h
+index ef1cc26..99431e3 100644
+--- a/include/lipm_walking/observer/CameraSensorShared.h
++++ b/include/lipm_walking/observer/CameraSensorShared.h
+@@ -55,6 +55,7 @@ struct CameraSensorShared
+   using v3d_allocator = ipc::allocator<Eigen::Vector3d, ipc::managed_shared_memory::segment_manager>;
+   ipc::interprocess_mutex points_mtx;
+   std::vector<Eigen::Vector3d, v3d_allocator> points;
++  std::vector<Eigen::Vector3d, v3d_allocator> ground_points;
+
+   /** Register a new client (client.isAlive() must be false) */
+   void newClient(pid_t pid);
+diff --git a/src/observer/CameraSensor.cpp b/src/observer/CameraSensor.cpp
+index 156d54f..7b992d7 100644
+--- a/src/observer/CameraSensor.cpp
++++ b/src/observer/CameraSensor.cpp
+@@ -99,15 +99,15 @@ void CameraSensor::update(mc_control::MCController & ctl)
+   if(new_ground_data_)
+   {
+     ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+-    points_.resize(data_->points.size());
+-    for(size_t i = 0; i < data_->points.size(); ++i)
++    ground_points_.resize(data_->ground_points.size());
++    for(size_t i = 0; i < data_->ground_points.size(); ++i)
+     {
+-      points_[i] = data_->points[i];
++      ground_points_[i] = data_->ground_points[i];
+     }
+-    if(points_.size())
++    if(!ground_points_.empty())
+     {
++      ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).update(ground_points_, t_);
+     }
+-    ctl.robot(robot_name_).device<mc_mujoco::RangeSensor>(sensor_name_).update(points_, t_);
+     new_ground_data_ = false;
+   }
+ }
+@@ -254,6 +254,25 @@ void CameraSensor::addToGUI(const mc_control::MCController & ctl,
+                                 return traj;
+                               }));
+
++  gui.addElement(points_category,
++    mc_rtc::gui::Trajectory("Ground reconstructed",
++      [this, &ctl]()
++      {
++        std::vector<Eigen::Vector3d> points;
++        {
++          ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
++          points = ground_points_;
++        }
++
++        if(points.empty())
++        {
++          return std::vector<Eigen::Vector3d>{Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
++        }
++
++        return points;
++      })
++  );
++
+   gui.addPlot(fmt::format("CameraSensor::{}", name_), mc_rtc::gui::plot::X("t", [this]() { return t_; }),
+               mc_rtc::gui::plot::Y(
+                   "range", [this]() { return points_.empty() ? 0. : points_[0].z(); }, mc_rtc::gui::Color::Red));
+@@ -280,6 +299,14 @@ void CameraSensor::startGroundEstimation(mc_control::MCController & ctl)
+             ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->mtx);
+             if(data_->data_ready->timed_wait(lck, pclock::universal_time() + ptime::seconds(1)))
+             {
++              {
++                ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
++                points_.resize(data_->points.size());
++                for(size_t i = 0; i < data_->points.size(); ++i)
++                {
++                  points_[i] = data_->points[i];
++                }
++              }
+               data_->skip = false;
+               if(ctl.datastore().has("SoftFootState::GetState"))
+               {
+diff --git a/src/observer/CameraSensorServer.cpp b/src/observer/CameraSensorServer.cpp
+index ad2d0ed..631830c 100644
+--- a/src/observer/CameraSensorServer.cpp
++++ b/src/observer/CameraSensorServer.cpp
+@@ -204,6 +204,8 @@ void CameraSensorServer::acquisition()
+     const size_t height = static_cast<size_t>(frame.get_height());
+     const size_t width = static_cast<size_t>(frame.get_width());
+
++    mc_rtc::log::info("h {} w {}", height, width);
++
+     const size_t half_height = static_cast<size_t>(static_cast<double>(height) * 0.5);
+     const size_t half_width = static_cast<size_t>(static_cast<double>(width) * 0.5);
+
+@@ -211,7 +213,7 @@ void CameraSensorServer::acquisition()
+     const size_t half_kernel_size = kernel_size_ / 2;
+     std::vector<Eigen::Vector3d> points;
+     const int offset = 20;
+-    for(size_t i = half_height + half_kernel_size; i < height - half_kernel_size - offset; ++i)
++    for(size_t i = 0 + half_kernel_size + offset; i < width - half_kernel_size - offset; ++i)
+     {
+       pixel[0] = static_cast<float>(i);
+       pixel[1] = static_cast<float>(half_height);
+@@ -225,6 +227,8 @@ void CameraSensorServer::acquisition()
+       }
+     }
+
++    mc_rtc::log::info("Read {} points", points.size());
++
+     // Sort
+     std::sort(points.begin(), points.end(),
+               [](const Eigen::Vector3d & a, const Eigen::Vector3d & b) { return a.x() < b.x(); });
+@@ -233,6 +237,15 @@ void CameraSensorServer::acquisition()
+       const std::lock_guard<std::mutex> lock(points_mtx_);
+       points_ = points;
+     }
++
++    {
++      ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
++      data_->points.resize(points.size());
++      for(size_t i = 0; i < points.size(); ++i)
++      {
++        data_->points[i] = points[i];
++      }
++    }
+     if(data_->client.isAlive())
+     {
+       data_->data_ready->notify_all();
+@@ -258,6 +271,7 @@ void CameraSensorServer::computation()
+       ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->mtx);
+       if(data_->compute_ready->timed_wait(lck, pclock::universal_time() + ptime::seconds(1)))
+       {
++        mc_rtc::log::error("Here");
+         do_computation();
+       }
+     }
+@@ -281,8 +295,8 @@ void CameraSensorServer::do_computation()
+   {
+     mc_rtc::log::info("Acquired {} raw points", points_.size());
+     const std::lock_guard<std::mutex> lock(points_mtx_);
+-    ground_points_ = points_;
+-    corrected_ground_points_.reserve(ground_points_.size());
++    new_camera_points_ = points_;
++    corrected_ground_points_.reserve(new_camera_points_.size());
+   }
+   {
+     mc_rtc::log::info("[Step 1] Estimate the z - pitch to bring back to 0");
+@@ -291,12 +305,12 @@ void CameraSensorServer::do_computation()
+     double t_z = 0.;
+
+     ceres::Problem problem;
+-    for(const auto & point : ground_points_)
++    for(const auto& point: new_camera_points_)
+     {
+-      const sva::PTransformd X_0_p(point);
+-      const sva::PTransformd X_s_p = X_0_p * (data_->X_b_s * data_->X_0_b).inv();
+-      ceres::CostFunction * cost_function = PitchZCostFunctor::Create(X_s_p, data_->X_0_b, data_->X_b_s);
+-      problem.AddResidualBlock(cost_function, new ceres::CauchyLoss(0.5), &pitch, &t_z);
++      const sva::PTransformd X_0_p = sva::PTransformd(point) * data_->X_b_s * data_->X_0_b;
++      const sva::PTransformd X_s_p(point);
++      ceres::CostFunction* cost_function = PitchZCostFunctor::Create(X_s_p, data_->X_0_b, data_->X_b_s);
++      problem.AddResidualBlock(cost_function,  new ceres::CauchyLoss(0.5), &pitch, &t_z);
+     }
+     ceres::CostFunction * min_p = new ceres::AutoDiffCostFunction<Minimize, 1, 1>(new Minimize());
+     problem.AddResidualBlock(min_p, nullptr, &pitch);
+@@ -313,13 +327,13 @@ void CameraSensorServer::do_computation()
+     // Compute the 3D point in world frame
+     {
+       corrected_ground_points_.clear();
+-      for(const auto & pp : ground_points_)
+-      {
+-        // From camera frame to world frame
+-        sva::PTransformd X_s_p(pp);
+-        sva::PTransformd X_0_p = X_s_p * data_->X_b_s * X_b_b * data_->X_0_b;
+-        corrected_ground_points_.push_back(X_0_p.translation());
+-      }
++      for(const auto& point: new_camera_points_)
++        {
++          // From camera frame to world frame
++          const sva::PTransformd X_s_p(point);
++          const sva::PTransformd X_0_p = X_s_p * data_->X_b_s * X_b_b * data_->X_0_b;
++          corrected_ground_points_.push_back(X_0_p.translation());
++        }
+     }
+     auto stop = std::chrono::high_resolution_clock::now();
+     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+@@ -345,7 +359,7 @@ void CameraSensorServer::do_computation()
+         return;
+       }
+
+-      // pc_estimated_ground_points_ = pc_estimated_ground_points_->VoxelDownSample(0.005);
++      pc_estimated_ground_points_ = pc_estimated_ground_points_->VoxelDownSample(0.005);
+
+       const auto front =
+           Eigen::Vector3d(data_->X_0_b.translation().x() + 0.0, data_->X_0_b.translation().y() - 0.05, -0.04);
+@@ -353,8 +367,7 @@ void CameraSensorServer::do_computation()
+           Eigen::Vector3d(data_->X_0_b.translation().x() + 0.55, data_->X_0_b.translation().y() + 0.05, 0.04));
+       std::shared_ptr<open3d::geometry::PointCloud> pc_ground_points_cropped(new open3d::geometry::PointCloud);
+       *pc_ground_points_cropped = *pc_full_ground_reconstructed_points_;
+-      // pc_ground_points_cropped = pc_ground_points_cropped->Crop(open3d::geometry::AxisAlignedBoundingBox(front,
+-      // back));
++      pc_ground_points_cropped = pc_ground_points_cropped->Crop(open3d::geometry::AxisAlignedBoundingBox(front, back));
+
+       // ICP For matching
+       auto result = open3d::pipelines::registration::RegistrationGeneralizedICP(
+@@ -387,10 +400,10 @@ void CameraSensorServer::do_computation()
+   {
+     ipc::scoped_lock<ipc::interprocess_mutex> lck(data_->points_mtx);
+     const auto & points = pc_full_ground_reconstructed_points_->points_;
+-    data_->points.resize(points.size());
++    data_->ground_points.resize(points.size());
+     for(size_t i = 0; i < points.size(); ++i)
+     {
+-      data_->points[i] = points[i];
++      data_->ground_points[i] = points[i];
+     }
+   }
+   data_->result_ready->notify_all();
+diff --git a/src/observer/CameraSensorServer.h b/src/observer/CameraSensorServer.h
+index 925c33d..2e090c4 100644
+--- a/src/observer/CameraSensorServer.h
++++ b/src/observer/CameraSensorServer.h
+@@ -45,7 +45,7 @@ private:
+   std::shared_ptr<open3d::geometry::PointCloud> pc_transformed_estimated_ground_points_;
+   std::shared_ptr<open3d::geometry::PointCloud> pc_full_ground_reconstructed_points_;
+   std::vector<Eigen::Vector3d> corrected_ground_points_;
+-  std::vector<Eigen::Vector3d> ground_points_;
++  std::vector<Eigen::Vector3d> new_camera_points_;
+
+   std::atomic<bool> run_ = false;
+
+diff --git a/src/observer/CameraSensorShared.cpp b/src/observer/CameraSensorShared.cpp
+index 5285472..480759f 100644
+--- a/src/observer/CameraSensorShared.cpp
++++ b/src/observer/CameraSensorShared.cpp
+@@ -29,7 +29,8 @@ ipc::managed_shared_memory & get_shm()
+ } // namespace
+
+ CameraSensorShared::CameraSensorShared(CameraSensorShared::CtorKey)
+-: points(CameraSensorShared::v3d_allocator(get_shm().get_segment_manager()))
++: points(CameraSensorShared::v3d_allocator(get_shm().get_segment_manager())),
++  ground_points(CameraSensorShared::v3d_allocator(get_shm().get_segment_manager()))
+ {
+ }
+
+diff --git a/src/states/SoftFootState.cpp b/src/states/SoftFootState.cpp
+index f053b73..60b8a68 100644
+--- a/src/states/SoftFootState.cpp
++++ b/src/states/SoftFootState.cpp
+@@ -590,7 +590,11 @@ void SoftFootState::estimateGround(mc_control::fsm::Controller & ctl, const Foot
+
+   // Only one range sensor
+   const auto& estimated_ground = ctl.robot().device<mc_mujoco::RangeSensor>(range_sensor_names_[current_moving_foot][0]).points();
+-  data.ground = estimated_ground;
++
++  if(!estimated_ground.empty())
++  {
++    data.ground = estimated_ground;
++  }
+
+   // // Return the parent body of the sensor (phalanx)
+   // const std::string& body_of_sensor = ctl.robot().device<mc_mujoco::RangeSensor>(range_sensor_names_[current_moving_foot][0]).parent();
+diff --git a/src/states/data/states.yaml b/src/states/data/states.yaml
+index d706ec4..ea88f6e 100644
+--- a/src/states/data/states.yaml
++++ b/src/states/data/states.yaml
+@@ -19,7 +19,7 @@ LIPMWalking::SoftFoot::Configured:
+   nr_phalanx: 1
+   range_sensors:
+     left_foot: ["LeftFootCameraSensor"]
+-    right_foot: ["RightFootRangeSensor::Top", "RightFootRangeSensor::Bot"]
++    right_foot: ["RightFootCameraSensor"]
+
+ LIPMWalking::WalkFSMWithSoftFootState:
+   base: Parallel

@@ -3,16 +3,16 @@ initial_plan: custom_forward
 SwingTraj:
   CubicSplineSimple:
     withdrawDurationRatio: 0.25
-    withdrawOffset: [0, 0, 0.015] # [m]
+    withdrawOffset: [0, 0, 0.035] # [m]
     approachDurationRatio: 0.25
-    approachOffset: [0, 0, 0.015] # [m]
-    swingOffset: [0, 0, 0.05] # [m]
+    approachOffset: [0, 0, 0.035] # [m]
+    swingOffset: [0, 0, 0.13] # [m] [0, 0, 0.1] 
   LandingSearch:
     withdrawDurationRatio: 0.2
     withdrawOffset: [0, 0, 0.04] # [m]
     preApproachDurationRatio: 0.25
     approachDurationRatio: 0.2
-    approachOffset: [0, 0, 0.04] # [m]
+    approachOffset: [0, 0, 0.15] # [m]
 # for the external planner HybridPlanner
 HybridPlanner:
   Tp: 6
@@ -77,14 +77,18 @@ robot_models:
       friction: 0.7
       leftAnkleOffset: [0.,0.] # target center of foot
   hrp4cr:
+    swingfoot:
+      weight: 2000
+      stiffness: 500
     stabilizer:
       dcm_tracking:
         gains:
-          prop: 4
-          integral: 5
-          deriv: 0.2
+          prop: [3,3] #  SoftFoot 3 Flat 4
+          integral: 0.0 # SoftFoot 0 Flat 5
+          deriv: [1.0,0.02] #  0.01 with VS 0.0 no VS
       admittance:
-        cop: [0.03, 0.04]
+        cop: [0.02, 0.0325] #[0.02, 0.0325] with VS [0.02, 0.03] with NO VS 
+        dfz: 0.00035 # 0.00035
         maxVel:
           angular: [3., 3., 3.]
           linear: [1., 1., 1.]
@@ -94,12 +98,16 @@ robot_models:
         torso:
           stiffness: 2.
           weight: 500
+          pitch: -0.1
       dcm_bias:
         dcmMeasureErrorStd: 0.001
         # biasDriftPerSeconStd: 0.0001
         zmpMeasureErrorStd: 0.0005
-        biasLimit: [0.05, 0.05]
+        # biasLimit: [0.05, 0.05] # for flat feet
+        biasLimit: [0.07, 0.05] # For SoftFoot
+        comBiasLimit: [0.07, 0.02] # For SoftFoot
         withDCMBias: true
+        correctCoMPos: true
       external_wrench:
         ## general ##
         add_expected_com_offset: false
@@ -117,15 +125,82 @@ robot_models:
         com_offset_com_cutoff: 10.0
         derivator_time_constant: 1.0
     sole:
-      half_length: 0.08
-      half_width: 0.038
+      half_length: 0.075 # 0.1
+      half_width: 0.035 # 0.038
       friction: 0.7
-      leftAnkleOffset: [-0.03, -0.02] # target center of foot
+      #leftAnkleOffset: [-0.09, -0.02] # LIPM
+      #leftAnkleOffset: [-0.01, -0.02] # target center of foot
+      leftAnkleOffset: [-0.06, -0.03] # target center of foot
+    torso:
+      pitch: 0.0
+    SwingTraj:
+      type: CubicSplineSimple
+  HRP4CR_soft:
+    swingfoot:
+      weight: 2000
+      stiffness: 500
+    stabilizer:
+      dcm_tracking:
+        gains:
+          prop: 3 # 4
+          integral: 0 # 5
+          deriv: 0 # 0.2
+      admittance:
+        cop: [0.03, 0.04]
+        maxVel:
+          angular: [3., 3., 3.]
+          linear: [1., 1., 1.]
+      tasks:
+        contact:
+          damping: 300.
+        torso:
+          stiffness: 2.
+          weight: 500
+          pitch: -0.1
+      dcm_bias:
+        dcmMeasureErrorStd: 0.001
+        # biasDriftPerSeconStd: 0.0001
+        zmpMeasureErrorStd: 0.0005
+        # biasLimit: [0.05, 0.05]
+        biasLimit: [0.07, 0.05] # For SoftFoot
+        comBiasLimit: [0.07, 0.02] # For SoftFoot
+        withDCMBias: true
+        correctCoMPos: true
+      external_wrench:
+        ## general ##
+        add_expected_com_offset: false
+        subtract_measured_value: true
+        exclude_from_dcm_bias_est : true
+        ## com offset ##
+        modify_com_error: true
+        modify_zmp_error: true
+        modify_zmp_error_d: false
+        com_offset_err_com_limit: 0.05
+        com_offset_err_zmp_limit: 0.05
+        ## filter ##
+        ext_wrench_sum_cutoff: 0.5
+        com_offset_cutoff: 0.05
+        com_offset_com_cutoff: 10.0
+        derivator_time_constant: 1.0
+    sole:
+      half_length: 0.07
+      half_width: 0.045
+      friction: 0.7
+      #leftAnkleOffset: [-0.09, -0.02] # LIPM
+      #leftAnkleOffset: [-0.045, -0.02] # LIPM
+      leftAnkleOffset: [-0.05, -0.02] # target center of foot
     torso:
       pitch: 0.0
     SwingTraj:
       type: CubicSplineSimple
   hrp5_p:
+    sole:
+      half_length: 0.11895
+      half_width: 0.069
+      friction: 0.7
+    torso:
+      pitch: 0.0
+  hrp5_p_soft:
     sole:
       half_length: 0.11895
       half_width: 0.069
@@ -274,7 +349,7 @@ plans:
       double_support_duration: 0.1
       single_support_duration: 0.7
       step_length: 0.2
-      swing_height: 0.04
+      swing_height: 0.06
       contacts:
         - pose:
             translation: [0.0, -0.09, 0.0]
@@ -584,7 +659,133 @@ plans:
       double_support_duration: 0.5
       single_support_duration: 1.2
       com_height: 0.817301
+      swing_height: 0.09
+      torso_pitch: -0.1
+      contacts:
+        - pose:
+            translation: [0.035, -0.15, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.015, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.035, -0.15, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.015, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.035, -0.15, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.015, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.035, -0.15, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.015, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.035, -0.15, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.015, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.035, -0.15, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.015, 0.0]
+          surface: LeftFootCenter
+    custom_backward:
+      double_support_duration: 0.5
+      single_support_duration: 1.0
+      step_length: 0.1
+      swing_height: 0.065
+      com_height: 0.817301
+      contacts:
+        - pose:
+            translation: [0.0, -0.15, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.15, 0.0]
+          surface: LeftFootCenter
+    custom_forward:
+      # init_dsp_duration: 0.6
+      double_support_duration: 1.0 #0.6
+      single_support_duration: 1.2 #1.5
+      step_length: 0.1 #0.15
+      # swing_height: 0.08
+      torso_pitch: -0.1
+      swing_height: 0.06 #LIPM
+      # com_height: 0.817301 # Flat feet 0.835301 when we attach SoftFoot
+      com_height: 0.83 
+      contacts:
+        - pose:
+            translation: [0.0, -0.20, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.20, 0.0]
+          surface: LeftFootCenter
+    custom_lateral:
+      double_support_duration: 0.4
+      single_support_duration: 1.2
+      step_length: 0.1
       swing_height: 0.04
+      com_height: 0.817301
+      contacts:
+        - pose:
+            translation: [0.0, -0.15, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.15, 0.0]
+          surface: LeftFootCenter
+      mpc:
+        weights:
+          jerk: 1.0
+          vel: [10.0, 300.0]
+          zmp: 1000.0
+    warmup:
+      double_support_duration: 0.5
+      single_support_duration: 1.2
+      swing_height: 0.09
+      com_height: 0.817301
+      torso_pitch: -0.1
+      contacts:
+        - pose:
+            translation: [0.035, -0.09, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.09, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.035, -0.09, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.09, 0.0]
+          surface: LeftFootCenter
+    external:
+      double_support_duration: 0.5
+      single_support_duration: 0.7
+      ####
+      # Configures the maximum allowed time for the planner to compute a solution.
+      # If the planner could not compute a plan in the allowed time, the robot will pause walking until a new request
+      # is sent and successful.
+      # If the robot pauses walking too often, try increasing this parameter.
+      ####
+      allowed_planning_time:
+        # the maximum allowed time during standing may be arbitrarely large (we don't need to react fast)
+        # This corresponds to the absolute maximum time that the user will have to wait for a plan (or notification of failure)
+        standing: 2.0
+        # the maximum allowed time during single support should be as short as possible but still ensure that in normal operations
+        # the planner has enough time to come up with a solution.
+        # This parameter MUST BE less than single_support_duration, and allow a sufficient margin to account for communication delay with the planner
+        # - reducing it increases reactivity (we have a longer window of opportunity during which the single support phase can request a plan)
+        # - increasing it decrases reactivity but increases the likelyhood that the planner will successfully find a solution
+        single_support: 0.2
+      swing_height: 0.04
+      com_height: 0.817301
       contacts:
         - pose:
             translation: [0.035, -0.07, 0.0]
@@ -592,55 +793,80 @@ plans:
         - pose:
             translation: [0.035, 0.07, 0.0]
           surface: LeftFootCenter
+      mpc:
+        weights:
+          jerk: 1.0
+          vel: [10.0, 100.0]
+          zmp: 1000.0
+      # Offset (x,y,theta) between the plan's target frame and the left/right foot expressed in target frame
+      leftFootLandingOffset: [0.0, 0.07, 0.0] # x, y, theta
+      rightFootLandingOffset: [0.0, -0.07, 0.0] # x, y, theta
+  HRP4CR_soft:
+    ashibumi: # stepping in place
+      double_support_duration: 0.5
+      single_support_duration: 1.2
+      com_height: 0.817301
+      swing_height: 0.09
+      torso_pitch: -0.1
+      contacts:
         - pose:
-            translation: [0.035, -0.07, 0.0]
+            translation: [0.035, -0.09, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.035, 0.07, 0.0]
+            translation: [0.035, 0.09, 0.0]
           surface: LeftFootCenter
         - pose:
-            translation: [0.035, -0.07, 0.0]
+            translation: [0.035, -0.09, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.035, 0.07, 0.0]
+            translation: [0.035, 0.09, 0.0]
           surface: LeftFootCenter
         - pose:
-            translation: [0.035, -0.07, 0.0]
+            translation: [0.035, -0.09, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.035, 0.07, 0.0]
+            translation: [0.035, 0.09, 0.0]
           surface: LeftFootCenter
         - pose:
-            translation: [0.035, -0.07, 0.0]
+            translation: [0.035, -0.09, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.035, 0.07, 0.0]
+            translation: [0.035, 0.09, 0.0]
           surface: LeftFootCenter
         - pose:
-            translation: [0.035, -0.07, 0.0]
+            translation: [0.035, -0.09, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.035, 0.07, 0.0]
+            translation: [0.035, 0.09, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.035, -0.09, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.09, 0.0]
           surface: LeftFootCenter
     custom_backward:
       double_support_duration: 0.5
       single_support_duration: 1.2
       step_length: 0.1
-      swing_height: 0.05
+      swing_height: 0.065
       com_height: 0.817301
       contacts:
         - pose:
-            translation: [0.0, -0.07, 0.0]
+            translation: [0.0, -0.15, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.0, 0.07, 0.0]
+            translation: [0.0, 0.15, 0.0]
           surface: LeftFootCenter
     custom_forward:
-      double_support_duration: 0.4
-      single_support_duration: 1.2
+      double_support_duration: 0.6
+      single_support_duration: 1.5
       step_length: 0.15
-      swing_height: 0.06
-      com_height: 0.817301
+      swing_height: 0.08
+      torso_pitch: -0.1
+      # swing_height: 0.04 #LIPM
+      # com_height: 0.817301
+      com_height: 0.835301 # when we attach SoftFoot
       contacts:
         - pose:
             translation: [0.0, -0.15, 0.0]
@@ -656,10 +882,10 @@ plans:
       com_height: 0.817301
       contacts:
         - pose:
-            translation: [0.0, -0.07, 0.0]
+            translation: [0.0, -0.15, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.0, 0.07, 0.0]
+            translation: [0.0, 0.15, 0.0]
           surface: LeftFootCenter
       mpc:
         weights:
@@ -669,20 +895,21 @@ plans:
     warmup:
       double_support_duration: 0.5
       single_support_duration: 1.2
-      swing_height: 0.04
+      swing_height: 0.09
       com_height: 0.817301
+      torso_pitch: -0.1
       contacts:
         - pose:
-            translation: [0.035, -0.07, 0.0]
+            translation: [0.035, -0.09, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.035, 0.07, 0.0]
+            translation: [0.035, 0.09, 0.0]
           surface: LeftFootCenter
         - pose:
-            translation: [0.035, -0.07, 0.0]
+            translation: [0.035, -0.09, 0.0]
           surface: RightFootCenter
         - pose:
-            translation: [0.035, 0.07, 0.0]
+            translation: [0.035, 0.09, 0.0]
           surface: LeftFootCenter
     external:
       double_support_duration: 0.5
@@ -911,6 +1138,180 @@ plans:
       leftFootLandingOffset: [0.0, 0.105, 0.0] # x, y, theta
       rightFootLandingOffset: [0.0, -0.105, 0.0] # x, y, theta
   hrp5_p:
+    ashibumi: # stepping in place
+      double_support_duration: 0.2
+      single_support_duration: 0.8
+      swing_height: 0.04
+      contacts:
+        - pose:
+            translation: [0.0, -0.105, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.105, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.0, -0.105, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.105, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.0, -0.105, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.105, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.0, -0.105, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.105, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.0, -0.105, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.105, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.0, -0.105, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.105, 0.0]
+          surface: LeftFootCenter
+    custom_backward:
+      double_support_duration: 0.2
+      single_support_duration: 0.8
+      step_length: 0.15
+      swing_height: 0.05
+      contacts:
+        - pose:
+            translation: [0.0, -0.105, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.105, 0.0]
+          surface: LeftFootCenter
+    custom_forward:
+      double_support_duration: 0.1
+      single_support_duration: 0.7
+      step_length: 0.2
+      swing_height: 0.04
+      contacts:
+        - pose:
+            translation: [0.0, -0.105, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.105, 0.0]
+          surface: LeftFootCenter
+    custom_lateral:
+      double_support_duration: 0.2
+      single_support_duration: 0.8
+      step_length: 0.1
+      swing_height: 0.04
+      contacts:
+        - pose:
+            translation: [0.0, -0.105, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.105, 0.0]
+          surface: LeftFootCenter
+      mpc:
+        weights:
+          jerk: 1.0
+          vel: [10.0, 300.0]
+          zmp: 1000.0
+    walk_backward_75cm:
+      double_support_duration: 0.2
+      single_support_duration: 0.8
+      swing_height: 0.05
+      contacts:
+        - pose:
+            translation: [0.0, -0.105, 0.0]
+          ref_vel: [0.0, 0.0, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.105, 0.0]
+          ref_vel: [0.0, 0.0, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [-0.15, -0.105, 0.0]
+          ref_vel: [-0.075, 0.0, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [-0.3, 0.105, 0.0]
+          ref_vel: [-0.15, 0.0, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [-0.45, -0.105, 0.0]
+          ref_vel: [-0.15, 0.0, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [-0.6, 0.105, 0.0]
+          ref_vel: [-0.075, 0.0, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [-0.75, -0.105, 0.0]
+          ref_vel: [0.0, 0.0, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [-0.75, 0.105, 0.0]
+          ref_vel: [0.0, 0.0, 0.0]
+          surface: LeftFootCenter
+    walk_forward_100cm:
+      double_support_duration: 0.1
+      single_support_duration: 0.7
+      swing_height: 0.04
+      contacts:
+        - pose:
+            translation: [0.0, -0.105, 0.0]
+          ref_vel: [0.0, 0.0, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.0, 0.105, 0.0]
+          ref_vel: [0.0, 0.0, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.2, -0.105, 0.0]
+          ref_vel: [0.1, 0.0, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.4, 0.105, 0.0]
+          ref_vel: [0.2, 0.0, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.6, -0.105, 0.0]
+          ref_vel: [0.2, 0.0, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.8, 0.105, 0.0]
+          ref_vel: [0.1, 0.0, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [1.0, -0.105, 0.0]
+          ref_vel: [0.0, 0.0, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [1.0, 0.105, 0.0]
+          ref_vel: [0.0, 0.0, 0.0]
+          surface: LeftFootCenter
+    warmup:
+      double_support_duration: 0.1
+      single_support_duration: 0.7
+      swing_height: 0.04
+      contacts:
+        - pose:
+            translation: [0.035, -0.105, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.105, 0.0]
+          surface: LeftFootCenter
+        - pose:
+            translation: [0.035, -0.105, 0.0]
+          surface: RightFootCenter
+        - pose:
+            translation: [0.035, 0.105, 0.0]
+          surface: LeftFootCenter
+  hrp5_p_soft:
     ashibumi: # stepping in place
       double_support_duration: 0.2
       single_support_duration: 0.8
@@ -1375,6 +1776,9 @@ ObserverPipelines:
     - type: Encoder
     - type: Attitude
       required: false
+      config: 
+        KalmanFilter:
+          gyr_cov: 1e-6
     - type: KinematicInertial
       config:
         anchorFrame:
@@ -1401,8 +1805,8 @@ ObserverPipelines:
       name: CameraLeft
       gui: true
       config:
-        desired_state: LeftSwing
-        camera_serial: 230322275639
+        desired_state: Swing
+        camera_serial: 230322271690
         sensor_name: LeftFootCameraSensor
         path_to_preset: "/home/hrp4cruser/workspace/src/lipm_walking_controller/etc/D405_ShortRangePreset.JSON"
         kernel_size: 5
@@ -1412,8 +1816,8 @@ ObserverPipelines:
       name: CameraRight
       gui: true
       config:
-        desired_state: RightSwing
-        camera_serial: 230422273358
+        desired_state: Swing
+        camera_serial: 230322275063
         sensor_name: RightFootCameraSensor
         path_to_preset: "/home/hrp4cruser/workspace/src/lipm_walking_controller/etc/D405_ShortRangePreset.JSON"
         kernel_size: 5

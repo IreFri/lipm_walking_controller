@@ -89,15 +89,12 @@ public:
   /** \brief Const accessor to the configuration. */
   virtual const Configuration & config() const = 0;
 
+ 
   /** \brief Update the internal state of the swing trajectory.
       \param pitch pitch angle
   */
-  virtual void updatePitch(double pitch) = 0;
-
-   /** \brief Update the internal state of the swing trajectory.
-      \param x_offset x offset
-  */
-  virtual void updatePosXZ(double x_offset, double z_offset) = 0;
+  virtual void update(double pitch, double x_offset, double z_offset)
+  {}
 
 protected:
   /** \brief Accessor to the configuration. */
@@ -118,6 +115,8 @@ public:
 
   //! IK task gain
   TaskGain taskGain_;
+
+  mutable double t_ = 0.;
 
 protected:
   //! Time when touch down is detected (-1 if not detected)
