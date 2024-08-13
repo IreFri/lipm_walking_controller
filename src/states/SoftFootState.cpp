@@ -635,7 +635,7 @@ void SoftFootState::runState()
   };
 
   // Open the valves
-  if(foot_data_[current_moving_foot].valves_status == 0 && checkSingleSupportTime(0.05) && belowSingleSupportTime(0.75))
+  if(checkSingleSupportTime(0.05) && belowSingleSupportTime(0.75))
   { 
     // std::cout << "CHECK IF GOING " << std::endl;
     if(with_variable_stiffness_)
@@ -645,7 +645,7 @@ void SoftFootState::runState()
   }
 
   // Close the valves
-  if(foot_data_[current_moving_foot].valves_status == 1 && checkSingleSupportTime(0.8))
+  if(checkSingleSupportTime(0.8))
   {
     // call the server and update the variable stiffness
     if(with_variable_stiffness_)
@@ -2098,15 +2098,15 @@ void SoftFootState::reset(mc_control::fsm::Controller & ctl, const Foot & foot)
   const std::string name = foot == Foot::Left ? "left" : "right";
 
   // Make sure to close the valve
-  if(foot_data_[other_foot].valves_status == 1)
-  {
+  // if(foot_data_[other_foot].valves_status == 1)
+  // {
     // call the server and update the variable stiffness
-    if(with_variable_stiffness_)
-    {
-      mc_rtc::log::error("Close for {}", other_foot == Foot::Right ? "Right" : "Left");
-      updateVariableStiffness(ctl, other_foot, false);
-    }
+  if(with_variable_stiffness_)
+  {
+    mc_rtc::log::error("Close for {}", other_foot == Foot::Right ? "Right" : "Left");
+    updateVariableStiffness(ctl, other_foot, false);
   }
+  // }
 
   // Reset logger
   ctl.logger().removeLogEntry("MyMeasures_" + other_name + "_range");

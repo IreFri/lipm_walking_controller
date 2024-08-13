@@ -216,8 +216,8 @@ protected:
     Eigen::Vector3d last_ground_Identity;
     std::vector<std::array<double, 2>> phalanxes;
     std::vector<double> altitude;
-    double k;
-    double pressure;
+    double k = 0;
+    double pressure = 0; //17 for HS
     double angle;
     double min_max_phalanxes_angle;
     double position_offset_x;
